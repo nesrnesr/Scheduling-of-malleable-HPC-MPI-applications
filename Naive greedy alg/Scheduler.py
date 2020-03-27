@@ -92,6 +92,15 @@ class Scheduler(object):
                 self.tasks.append(
                     Task(job.id, mass_executed, servers, start_time, end_time))
 
+            task_job = self._task_job(task)
+            task_servers = reallocate_task_servers(task)
+            interrupt_task(task, task_job)
+            reconfig = make_reconfiguration(task_job, task_servers)
+            reschedule_interrupted(task_job, reconfig, task_servers)
+
+        task_to_reconfig = tasks_candidates[0]
+        reconfigure_task(task_to_reconfig)
+
     # returns a list of servers not utilized at a given time
     def _available_servers(self, time):
         #Start with all servers as potential servers
