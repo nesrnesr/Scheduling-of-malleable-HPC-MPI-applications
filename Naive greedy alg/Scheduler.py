@@ -61,6 +61,15 @@ class Scheduler(object):
                     task_servers.append(available_servers[i])
                 return task_servers
 
+            # Reconfigure and update the task
+            # Update the task end_time and mass_executed.
+            def interrupt_task(task, job):
+                task.end_time = time
+                exec_time = task.end_time - task.start_time
+                task.mass_executed = self._mass_exec(job.alpha,
+                                                     len(task.servers),
+                                                     exec_time)
+
     # returns a list of servers not utilized at a given time
     def _available_servers(self, time):
         #Start with all servers as potential servers
