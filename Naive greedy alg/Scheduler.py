@@ -70,6 +70,28 @@ class Scheduler(object):
                                                      len(task.servers),
                                                      exec_time)
 
+        #Create a new task for reconfiguration
+
+            def make_reconfiguration(job, servers):
+                reconfig_time = self._reconfig_time(job.data,
+                                                    len(task.servers),
+                                                    len(servers))
+                reconfig_end_time = time + reconfig_time
+                reconfig = Reconfiguration(job.id, servers, time,
+                                           reconfig_end_time)
+                self.tasks.append(reconfig)
+                return reconfig
+
+            # Create a task to finish job after reconfig
+            def reschedule_interrupted(job, reconfig, servers):
+                mass_left = job.mass - self._mass_executed(job, time)
+                exec_time = self._exec_time(mass_left, job.alpha, len(servers))
+                start_time = reconfig.end_time
+                end_time = reconfig.end_time + exec_time
+                mass_executed = mass_left
+                self.tasks.append(
+                    Task(job.id, mass_executed, servers, start_time, end_time))
+
     # returns a list of servers not utilized at a given time
     def _available_servers(self, time):
         #Start with all servers as potential servers
