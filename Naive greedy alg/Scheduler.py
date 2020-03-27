@@ -22,6 +22,25 @@ class Scheduler(object):
             else:
                 self._schedule_task(available_servers, job, job.sub_time)
 
+    def update_schedule(self, time):
+        #get the free servers
+        available_servers = self._available_servers(time + 0.01)
+        num_available_servers = len(available_servers)
+
+        print('Number of available servers at update: ', num_available_servers)
+
+        #Check if there is job queued
+        if (self.job_queued):
+            #Try to schedule each job
+            for job in self.job_queued:
+                if (num_available_servers > job.min_num_servers):
+                    self._schedule_task(available_servers, job, time)
+                    #remove job from queue
+                    self.job_queued.remove(job)
+                    #update list of servers available
+                    available_servers = self._available_servers(time + 0.01)
+                    num_available_servers = len(available_servers)
+
     # returns a list of servers not utilized at a given time
     def _available_servers(self, time):
         #Start with all servers as potential servers
