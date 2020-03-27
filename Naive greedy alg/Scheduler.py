@@ -177,3 +177,28 @@ class Scheduler(object):
     #Returns the job that a task is executing
     def _task_job(self, task):
         return next(j for j in self.jobs if task.from_job(j))
+
+        #TODO
+    def jobs_reconfigured(self):
+        return []  #array of jobs
+
+    def num_jobs_reconfigured(self):
+        return len(self.jobs_reconfigured())
+
+    def stretch_time(self, job):
+        #find the termination time from the tasks of that job and subtime, divide the difference by the mass
+        term_time = -1
+        for t in self.tasks:
+            if t.job_id == job.id and t.end_time > term_time:
+                term_time = t.end_time
+        return (term_time - job.sub_time) / job.mass
+
+    def stretch_times(self):
+        #array of all the stretch times
+        return [self.stretch_time(j) for j in self.jobs]
+
+    def average_stretch_time(self):
+        return mean(self.stretch_times())
+
+    def max_stretch_time(self):
+        return max(self.stretch_times())
