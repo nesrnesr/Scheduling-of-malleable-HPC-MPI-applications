@@ -163,3 +163,17 @@ class Scheduler(object):
         min_time = min([t.start_time for t in self.tasks])
         max_time = max([t.end_time for t in self.tasks])
         return max_time - min_time
+
+    def job_ids(self):
+        return [j.id for j in self.jobs]
+
+    def server_ids(self):  # server_id_list
+        return [s.id for s in self.servers]
+
+    @property
+    def server_count(self):
+        return len(self.servers)
+
+    #Returns the job that a task is executing
+    def _task_job(self, task):
+        return next(j for j in self.jobs if task.from_job(j))
