@@ -135,3 +135,25 @@ class Scheduler(object):
             return job.max_num_servers - task_num_servers
         else:
             return num_servers
+
+    # Formula for communication time
+    def _mass_exec(self, alpha, num_serv, exec_time):
+        return exec_time * (num_serv)**alpha
+
+    def _exec_time(self, mass, alpha, num_serv):
+        return mass / (num_serv)**alpha
+
+    #Calculates the reconfiguration time
+    def _reconfig_time(self, data, init_servers, final_servers):
+        if init_servers > final_servers:
+            return data / init_servers * (ceil(init_servers / final_servers) -
+                                          1)
+        return data / final_servers * (ceil(final_servers / init_servers) - 1)
+
+    #Finds how much mass has been executing of job
+    def _mass_executed(self, job, time):
+        mass_ex = 0
+        for t in self.tasks:
+            if t.job_id == job.id:
+                mass_ex += t.mass_executed
+        return mass_ex
