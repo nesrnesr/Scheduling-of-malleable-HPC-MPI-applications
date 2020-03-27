@@ -48,6 +48,19 @@ class Scheduler(object):
             self._task_possible_inc_num_ser(t, time, num_available_servers) > 0
         ]
 
+        if (len(tasks_candidates) == 0):
+            return
+
+        def reconfigure_task(task):
+            # Return the list of new servers to execute the task
+            def reallocate_task_servers(task):
+                extra_srv_count = self._task_possible_inc_num_ser(
+                    task, time, num_available_servers)
+                task_servers = [s for s in task.servers]
+                for i in range(extra_srv_count):
+                    task_servers.append(available_servers[i])
+                return task_servers
+
     # returns a list of servers not utilized at a given time
     def _available_servers(self, time):
         #Start with all servers as potential servers
