@@ -157,3 +157,9 @@ class Scheduler(object):
             if t.job_id == job.id:
                 mass_ex += t.mass_executed
         return mass_ex
+
+    # Returns the makespan
+    def work_duration(self):
+        min_time = min([t.start_time for t in self.tasks])
+        max_time = max([t.end_time for t in self.tasks])
+        return max_time - min_time
