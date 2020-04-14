@@ -5,61 +5,36 @@ from .Task import Task
 from .Reconfiguration import Reconfiguration
 from .PowerOff import PowerOff
 from .Energy import Energy
+from dataclasses import dataclass
 import numpy as np
 
 
+@dataclass
+class SchedulerConfig:
+    server_threshold: float = 0.7
+    ratio_almost_finished_jobs: float = 0.8
+    time_remaining_for_power_off: int = 370
+    shut_down_time: int = 800
+    estimated_improv_threshold: float = 0.9
+
+    alpha_min_server_lower_range: float = 0.4
+    alpha_min_server_mid_range: float = 0.6
+    alpha_min_server_upper_range: float = 1
+
+    alpha_lower: float = 0.65
+    alpha_mid: float = 0.75
+
+    stretch_time_weight: float = 1
+    energy_weight: float = 1
+
+
 class Scheduler(object):
-    def __init__(self, servers):
+    def __init__(self, servers, conf):
         self.servers = servers
         self.jobs = []
         self.tasks = []
         self.job_queued = []
-
-        # tuning parameters
-        self.server_threshold = 0.7
-        self.ratio_almost_finished_jobs = 0.8
-
-        self.time_remaining_for_power_off = 370
-        self.shut_down_time = 800
-
-        self.estimated_improv_threshold = (
-            0.9  # ratio of the remaining time of the reconfigured to the original time
-        )
-
-        self.alpha_min_server_lower_range = 0.4
-        self.alpha_min_server_mid_range = 0.6
-        self.alpha_min_server_upper_range = 1
-
-        self.alpha_lower = 0.65
-        self.alpha_mid = 0.75
-
-        # Cost function weights
-        self.stretch_time_weight = 1
-        self.energy_weight = 1
-
-    def set_tuning_params(
-        self,
-        server_threshold,
-        ratio_almost_finished_jobs,
-        time_remaining_for_power_off,
-        shut_down_time,
-        estimated_improv_threshold,
-        alpha_min_server_lower_range,
-        alpha_min_server_mid_range,
-        alpha_min_server_upper_range,
-        alpha_lower,
-        alpha_mid,
-    ):
-        self.server_threshold = server_threshold
-        self.ratio_almost_finished_jobs = ratio_almost_finished_jobs
-        self.time_remaining_for_power_off = time_remaining_for_power_off
-        self.shut_down_time = shut_down_time
-        self.estimated_improv_threshold = estimated_improv_threshold
-        self.alpha_min_server_lower_range = alpha_min_server_lower_range
-        self.alpha_min_server_mid_range = alpha_min_server_mid_range
-        self.alpha_min_server_upper_range = alpha_min_server_upper_range
-        self.alpha_lower = alpha_lower
-        self.alpha_mid = alpha_mid
+        self.conf = conf
 
     def schedule1(self, job):
         self.jobs.append(job)
@@ -105,13 +80,13 @@ class Scheduler(object):
                 if job_termination_time > time:
                     num_jobs_currently_executed += 1
                     time_remaining = job_termination_time - time
-                    if time_remaining < self.time_remaining_for_power_off:
+                    if time_remaining < self.conf.time_remaining_for_power_off:
                         num_jobs_finishing_under_threshold_time += 1
             if (
                 num_jobs_currently_executed > 0
                 and num_jobs_finishing_under_threshold_time
                 / num_jobs_currently_executed
-                <= self.ratio_almost_finished_jobs
+                <= self.conf.ratio_almost_finished_jobs
             ):
                 available_servers = self._available_servers(time)
                 self.turn_off_servers(available_servers, time)
@@ -221,7 +196,7 @@ class Scheduler(object):
         reschedule_interrupted(task_job, reconfig, task_servers)
 
     def turn_off_servers(self, servers, time):
-        self.tasks.append(PowerOff(servers, time, time + self.shut_down_time))
+        self.tasks.append(PowerOff(servers, time, time + self.conf.shut_down_time))
 
     #################################################################
     def _is_job_reconfigurable(self, job, time):
@@ -251,7 +226,7 @@ class Scheduler(object):
         exec_time = self._exec_time(mass_left, job.alpha, new_srv_count)
         if (
             reconfig_time + exec_time
-        ) / remaining_time < self.estimated_improv_threshold:
+        ) / remaining_time < self.conf.estimated_improv_threshold:
             return True
         else:
             return False
@@ -279,21 +254,25 @@ class Scheduler(object):
     def _num_server_alloc(self, job, time):
         num_available_servers = self._num_available_servers(time)
 
-        if job.alpha > self.alpha_mid:
-            min_servers = ceil(self.alpha_min_server_upper_range * len(self.servers))
+        if job.alpha > self.conf.alpha_mid:
+            min_servers = ceil(
+                self.conf.alpha_min_server_upper_range * len(self.servers)
+            )
             return min(min_servers, job.max_num_servers, num_available_servers)
-        elif job.alpha > self.alpha_lower:
-            min_servers = ceil(self.alpha_min_server_mid_range * len(self.servers))
+        elif job.alpha > self.conf.alpha_lower:
+            min_servers = ceil(self.conf.alpha_min_server_mid_range * len(self.servers))
             return min(min_servers, job.max_num_servers, num_available_servers)
         else:
-            min_servers = ceil(self.alpha_min_server_lower_range * len(self.servers))
+            min_servers = ceil(
+                self.conf.alpha_min_server_lower_range * len(self.servers)
+            )
             return min(min_servers, job.max_num_servers, num_available_servers)
 
     def _order_queue_by_sub_time(self):
         self.job_queued = sorted(self.job_queued, key=lambda k: k.sub_time)
 
     def _is_ratio_available_servers_above_threshold(self, time):
-        if self._ratio_available_servers(time) > self.server_threshold:
+        if self._ratio_available_servers(time) > self.conf.server_threshold:
             return True
         else:
             return False
@@ -477,8 +456,8 @@ class Scheduler(object):
 
     def cost_function(self):
         return (
-            self.stretch_time_weight * self.average_stretch_time()
-            + self.energy_weight * self.normalized_average_power()
+            self.conf.stretch_time_weight * self.average_stretch_time()
+            + self.conf.energy_weight * self.normalized_average_power()
         )
 
     def summary(self):
