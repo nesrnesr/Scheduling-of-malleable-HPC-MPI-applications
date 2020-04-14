@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import greedy
+import scheduling
 
 if __name__ == "__main__":
     scheduling.main()
