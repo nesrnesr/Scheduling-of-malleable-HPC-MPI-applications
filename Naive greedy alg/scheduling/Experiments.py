@@ -1,6 +1,6 @@
 from .Job import Job
 from .Server import Server
-from .Scheduler import Scheduler
+from .Scheduler import Scheduler, SchedulerConfig
 import pandas as pd
 from random import seed, uniform, randrange
 
@@ -17,13 +17,32 @@ class Experiments:
         "cost function",
     ]
 
-    def __init__(self, num_expts, seeds=2):
-        self.num_expts = num_expts
-        self.seeds = seeds
+    def __init__(self, seed):
+        self.seed = seed
 
-    def run_expts(self, config):
+    def make_random_config(self):
+        seed(self.seed)
+        c = SchedulerConfig()
+        c.server_threshold = uniform(0.5, 0.91)
+        c.ratio_almost_finished_jobs = uniform(0.5, 0.91)
+        c.time_remaining_for_power_off = uniform(370, 600)
+        c.shut_down_time = uniform(
+            c.time_remaining_for_power_off, c.time_remaining_for_power_off * 2
+        )
+        c.estimated_improv_threshold = uniform(0.5, 0.91)
+        c.alpha_min_server_lower_range = uniform(0.01, 0.4)
+        c.alpha_min_server_mid_range = uniform(
+            c.alpha_min_server_lower_range, c.alpha_min_server_lower_range * 2
+        )
+        c.alpha_min_server_upper_range = uniform(c.alpha_min_server_mid_range, 1)
+        c.alpha_lower = uniform(0.5, 0.7)
+        c.alpha_mid = uniform(c.alpha_lower, 0.9)
+        return c
+
+    def run_expts(self, config, num_expts):
+        seed(self.seed)
         stats = []
-        for i in range(self.num_expts):
+        for i in range(num_expts):
             expt_stats = self._run_expt(config)
             stats.append(expt_stats)
         return pd.concat(stats)
@@ -50,7 +69,6 @@ class Experiments:
         return jobs
 
     def _generate_job(self, num):
-        seed(self.seeds)
         sub_time = uniform(0, 3000)
         alpha = uniform(0.5, 1)
         data = uniform(10, 1000)
