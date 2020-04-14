@@ -1,3 +1,13 @@
+from math import ceil
+from random import sample
+from statistics import mean
+from .Task import Task
+from .Reconfiguration import Reconfiguration
+from .PowerOff import PowerOff
+from .Energy import Energy
+import numpy as np
+
+
 class Scheduler(object):
     def __init__(self, servers):
         self.servers = servers
@@ -12,7 +22,9 @@ class Scheduler(object):
         self.time_remaining_for_power_off = 370
         self.shut_down_time = 800
 
-        self.estimated_improv_threshold = 0.9  #ratio of the remaining time of the reconfigured to the original time
+        self.estimated_improv_threshold = (
+            0.9  # ratio of the remaining time of the reconfigured to the original time
+        )
 
         self.alpha_min_server_lower_range = 0.4
         self.alpha_min_server_mid_range = 0.6
@@ -21,17 +33,23 @@ class Scheduler(object):
         self.alpha_lower = 0.65
         self.alpha_mid = 0.75
 
-        #Cost function weights
+        # Cost function weights
         self.stretch_time_weight = 1
         self.energy_weight = 1
 
-    def set_tuning_params(self, server_threshold, ratio_almost_finished_jobs,
-                          time_remaining_for_power_off, shut_down_time,
-                          estimated_improv_threshold,
-                          alpha_min_server_lower_range,
-                          alpha_min_server_mid_range,
-                          alpha_min_server_upper_range, alpha_lower,
-                          alpha_mid):
+    def set_tuning_params(
+        self,
+        server_threshold,
+        ratio_almost_finished_jobs,
+        time_remaining_for_power_off,
+        shut_down_time,
+        estimated_improv_threshold,
+        alpha_min_server_lower_range,
+        alpha_min_server_mid_range,
+        alpha_min_server_upper_range,
+        alpha_lower,
+        alpha_mid,
+    ):
         self.server_threshold = server_threshold
         self.ratio_almost_finished_jobs = ratio_almost_finished_jobs
         self.time_remaining_for_power_off = time_remaining_for_power_off
@@ -57,8 +75,8 @@ class Scheduler(object):
                 if num_servers_to_use > 0:
                     available_servers = self._available_servers(time)
                     self._schedule_task_given_num_servers(
-                        num_servers_to_use, available_servers, job_to_sched,
-                        time)
+                        num_servers_to_use, available_servers, job_to_sched, time
+                    )
                     self.job_queued.remove(job_to_sched)
                 else:
                     break
@@ -66,20 +84,19 @@ class Scheduler(object):
                     break
 
         if self._is_ratio_available_servers_above_threshold(time):
-            #order job by remaining mass
+            # order job by remaining mass
             jobs_by_mass = self._jobs_by_mass_remaining(time)
             while jobs_by_mass:
                 job_reconfig = jobs_by_mass[0]
                 if self._is_job_reconfigurable(job_reconfig, time):
-                    task_to_reconfig = self._current_task_of_job(
-                        job_reconfig, time)
+                    task_to_reconfig = self._current_task_of_job(job_reconfig, time)
                     self._reconfigure_task(task_to_reconfig, time)
                     jobs_by_mass.remove(job_reconfig)
                 if self._is_ratio_available_servers_above_threshold(time):
                     break
 
         if self._num_available_servers(
-                time
+            time
         ) != 0 and not self._is_ratio_available_servers_above_threshold(time):
             num_jobs_currently_executed = 0
             num_jobs_finishing_under_threshold_time = 0
@@ -90,7 +107,12 @@ class Scheduler(object):
                     time_remaining = job_termination_time - time
                     if time_remaining < self.time_remaining_for_power_off:
                         num_jobs_finishing_under_threshold_time += 1
-            if num_jobs_currently_executed > 0 and num_jobs_finishing_under_threshold_time / num_jobs_currently_executed <= self.ratio_almost_finished_jobs:
+            if (
+                num_jobs_currently_executed > 0
+                and num_jobs_finishing_under_threshold_time
+                / num_jobs_currently_executed
+                <= self.ratio_almost_finished_jobs
+            ):
                 available_servers = self._available_servers(time)
                 self.turn_off_servers(available_servers, time)
 
@@ -100,47 +122,48 @@ class Scheduler(object):
     def schedule_simple(self, job):
         self.jobs.append(job)
 
-        #schedule the first job into one task
+        # schedule the first job into one task
         if len(self.tasks) == 0:
             self._schedule_task(self.servers, job, job.sub_time)
-        #Schedule the jobs
+        # Schedule the jobs
         else:
-            #Get the servers available at submission time
+            # Get the servers available at submission time
             available_servers = self._available_servers(job.sub_time)
-            if (len(available_servers) < job.min_num_servers):
+            if len(available_servers) < job.min_num_servers:
                 self.job_queued.append(job)
                 return
-            #Schedule task
+            # Schedule task
             else:
                 self._schedule_task(available_servers, job, job.sub_time)
 
     def update_schedule_simple(self, time):
-        #get the free servers
+        # get the free servers
         available_servers = self._available_servers(time + 0.01)
         num_available_servers = len(available_servers)
 
-        #print('Number of available servers at update: ', num_available_servers)
+        # print('Number of available servers at update: ', num_available_servers)
 
-        #Check if there is job queued
-        if (self.job_queued):
-            #Try to schedule each job
+        # Check if there is job queued
+        if self.job_queued:
+            # Try to schedule each job
             for job in self.job_queued:
-                if (num_available_servers > job.min_num_servers):
+                if num_available_servers > job.min_num_servers:
                     self._schedule_task(available_servers, job, time)
-                    #remove job from queue
+                    # remove job from queue
                     self.job_queued.remove(job)
-                    #update list of servers available
+                    # update list of servers available
                     available_servers = self._available_servers(time + 0.01)
                     num_available_servers = len(available_servers)
 
-        #find tasks that could be reconfigured
-        #List of tasks for which the possible change of the number of servers is greater than 0
+        # find tasks that could be reconfigured
+        # List of tasks for which the possible change of the number of servers is greater than 0
         tasks_candidates = [
-            t for t in self.tasks if
-            self._task_possible_inc_num_ser(t, time, num_available_servers) > 0
+            t
+            for t in self.tasks
+            if self._task_possible_inc_num_ser(t, time, num_available_servers) > 0
         ]
 
-        if (len(tasks_candidates) == 0):
+        if len(tasks_candidates) == 0:
             return
 
         task_to_reconfig = tasks_candidates[0]
@@ -153,7 +176,8 @@ class Scheduler(object):
         # Return the list of new servers to execute the task
         def reallocate_task_servers(task):
             extra_srv_count = self._task_possible_inc_num_ser(
-                task, time, num_available_servers)
+                task, time, num_available_servers
+            )
             task_servers = [s for s in task.servers]
             for i in range(extra_srv_count):
                 task_servers.append(available_servers[i])
@@ -164,17 +188,18 @@ class Scheduler(object):
         def interrupt_task(task, job):
             task.end_time = time
             exec_time = task.end_time - task.start_time
-            task.mass_executed = self._mass_exec(job.alpha, len(task.servers),
-                                                 exec_time)
+            task.mass_executed = self._mass_exec(
+                job.alpha, len(task.servers), exec_time
+            )
 
-    #Create a new task for reconfiguration
+        # Create a new task for reconfiguration
 
         def make_reconfiguration(job, servers):
-            reconfig_time = self._reconfig_time(job.data, len(task.servers),
-                                                len(servers))
+            reconfig_time = self._reconfig_time(
+                job.data, len(task.servers), len(servers)
+            )
             reconfig_end_time = time + reconfig_time
-            reconfig = Reconfiguration(job.id, servers, time,
-                                       reconfig_end_time)
+            reconfig = Reconfiguration(job.id, servers, time, reconfig_end_time)
             self.tasks.append(reconfig)
             return reconfig
 
@@ -186,7 +211,8 @@ class Scheduler(object):
             end_time = reconfig.end_time + exec_time
             mass_executed = mass_left
             self.tasks.append(
-                Task(job.id, mass_executed, servers, start_time, end_time))
+                Task(job.id, mass_executed, servers, start_time, end_time)
+            )
 
         task_job = self._task_job(task)
         task_servers = reallocate_task_servers(task)
@@ -195,35 +221,37 @@ class Scheduler(object):
         reschedule_interrupted(task_job, reconfig, task_servers)
 
     def turn_off_servers(self, servers, time):
-        self.tasks.append(Power_off(servers, time, time + self.shut_down_time))
+        self.tasks.append(PowerOff(servers, time, time + self.shut_down_time))
 
     #################################################################
     def _is_job_reconfigurable(self, job, time):
-        #print(job.id)
+        # print(job.id)
         if abs(job.sub_time - time) < 0.001:
             return False
         remaining_time = self._job_termination_time(job) - time
-        #task to reconfigure
+        # task to reconfigure
         task = self._current_task_of_job(job, time)
         if task is None or type(task) is Reconfiguration:
             return False
-        #estimate exec time if task is reconfigured
+        # estimate exec time if task is reconfigured
         current_srv_count = len(task.servers)
         extra_srv_count = self._task_possible_inc_num_ser(
-            task, time, self._num_available_servers(time))
+            task, time, self._num_available_servers(time)
+        )
         new_srv_count = current_srv_count + extra_srv_count
         # Reconfiguration time
-        reconfig_time = self._reconfig_time(job.data, current_srv_count,
-                                            new_srv_count)
+        reconfig_time = self._reconfig_time(job.data, current_srv_count, new_srv_count)
 
-        #Mass remaining to execute until time
+        # Mass remaining to execute until time
         mass_left = task.mass_executed - self._mass_exec(
-            job.alpha, len(task.servers), time - task.start_time)
+            job.alpha, len(task.servers), time - task.start_time
+        )
 
-        #execution time on new srv count
+        # execution time on new srv count
         exec_time = self._exec_time(mass_left, job.alpha, new_srv_count)
-        if (reconfig_time +
-                exec_time) / remaining_time < self.estimated_improv_threshold:
+        if (
+            reconfig_time + exec_time
+        ) / remaining_time < self.estimated_improv_threshold:
             return True
         else:
             return False
@@ -252,16 +280,13 @@ class Scheduler(object):
         num_available_servers = self._num_available_servers(time)
 
         if job.alpha > self.alpha_mid:
-            min_servers = ceil(self.alpha_min_server_upper_range *
-                               len(self.servers))
+            min_servers = ceil(self.alpha_min_server_upper_range * len(self.servers))
             return min(min_servers, job.max_num_servers, num_available_servers)
         elif job.alpha > self.alpha_lower:
-            min_servers = ceil(self.alpha_min_server_mid_range *
-                               len(self.servers))
+            min_servers = ceil(self.alpha_min_server_mid_range * len(self.servers))
             return min(min_servers, job.max_num_servers, num_available_servers)
         else:
-            min_servers = ceil(self.alpha_min_server_lower_range *
-                               len(self.servers))
+            min_servers = ceil(self.alpha_min_server_lower_range * len(self.servers))
             return min(min_servers, job.max_num_servers, num_available_servers)
 
     def _order_queue_by_sub_time(self):
@@ -281,9 +306,9 @@ class Scheduler(object):
 
     # returns a list of servers not utilized at a given time
     def _available_servers(self, time):
-        #Start with all servers as potential servers
+        # Start with all servers as potential servers
         candidate_servers = [s for s in self.servers]
-        #remove servers that are busy at the given time
+        # remove servers that are busy at the given time
         for t in self.tasks:
             if not (t.start_time <= time and t.end_time > time):
                 continue
@@ -292,47 +317,43 @@ class Scheduler(object):
                     candidate_servers.remove(s)
         return candidate_servers
 
-    def _schedule_task_given_num_servers(self, num_servers, servers, job,
-                                         time):
+    def _schedule_task_given_num_servers(self, num_servers, servers, job, time):
         servers_selec = sample(servers, k=num_servers)
         exec_time = self._exec_time(job.mass, job.alpha, num_servers)
-        self.tasks.append(
-            Task(job.id, job.mass, servers_selec, time, time + exec_time))
+        self.tasks.append(Task(job.id, job.mass, servers_selec, time, time + exec_time))
 
     def _schedule_task(self, servers, job, time):
         num_servers = min(job.max_num_servers, len(servers))
         servers = sample(servers, k=num_servers)
         exec_time = self._exec_time(job.mass, job.alpha, num_servers)
-        self.tasks.append(
-            Task(job.id, job.mass, servers, time, time + exec_time))
+        self.tasks.append(Task(job.id, job.mass, servers, time, time + exec_time))
 
     # Returns the possible increase in the number of servers for a task
     # given that num_servers are not busy
     def _task_possible_inc_num_ser(self, task, time, num_servers):
-        #job = list(filter(lambda j: (j.id == task.job_id), self.jobs))[0]
-        if (task.end_time <= time):
+        # job = list(filter(lambda j: (j.id == task.job_id), self.jobs))[0]
+        if task.end_time <= time:
             return 0
         job = next(j for j in self.jobs if (j.id == task.job_id))
         task_num_servers = len(task.servers)
-        if (task_num_servers == job.max_num_servers):
+        if task_num_servers == job.max_num_servers:
             return 0
-        elif (task_num_servers + num_servers > job.max_num_servers):
+        elif task_num_servers + num_servers > job.max_num_servers:
             return job.max_num_servers - task_num_servers
         else:
             return num_servers
 
     # Formula for communication time
     def _mass_exec(self, alpha, num_serv, exec_time):
-        return exec_time * (num_serv)**alpha
+        return exec_time * (num_serv) ** alpha
 
     def _exec_time(self, mass, alpha, num_serv):
-        return mass / (num_serv)**alpha
+        return mass / (num_serv) ** alpha
 
-    #Calculates the reconfiguration time
+    # Calculates the reconfiguration time
     def _reconfig_time(self, data, init_servers, final_servers):
         if init_servers > final_servers:
-            return data / init_servers * (ceil(init_servers / final_servers) -
-                                          1)
+            return data / init_servers * (ceil(init_servers / final_servers) - 1)
         return data / final_servers * (ceil(final_servers / init_servers) - 1)
 
     ############################################################
@@ -349,7 +370,7 @@ class Scheduler(object):
     def _mass_remaining(self, job, time):
         return job.mass - self._mass_executed_at_time(job, time)
 
-    #Finds how much mass has been executing of job at time t
+    # Finds how much mass has been executing of job at time t
     def _mass_executed_at_time(self, job, time):
         mass_ex = 0
         for t in self.tasks:
@@ -358,10 +379,11 @@ class Scheduler(object):
                     mass_ex += t.mass_executed
                 else:
                     mass_ex += t.mass_executed - self._mass_exec(
-                        job.alpha, len(t.servers), time - t.start_time)
+                        job.alpha, len(t.servers), time - t.start_time
+                    )
         return mass_ex
 
-    #Finds how much mass has been executing of job
+    # Finds how much mass has been executing of job
     def _mass_executed(self, job, time):
         mass_ex = 0
         for t in self.tasks:
@@ -385,12 +407,12 @@ class Scheduler(object):
     def server_count(self):
         return len(self.servers)
 
-    #Returns the job that a task is executing
+    # Returns the job that a task is executing
     def _task_job(self, task):
         return next(j for j in self.jobs if task.from_job(j))
 
     def stretch_time(self, job):
-        #find the termination time from the tasks of that job and subtime, divide the difference by the mass
+        # find the termination time from the tasks of that job and subtime, divide the difference by the mass
         term_time = -1
         for t in self.tasks:
             if t.job_id == job.id and t.end_time > term_time:
@@ -398,7 +420,7 @@ class Scheduler(object):
         return (term_time - job.sub_time) / job.mass
 
     def stretch_times(self):
-        #array of all the stretch times
+        # array of all the stretch times
         return [self.stretch_time(j) for j in self.jobs]
 
     def average_stretch_time(self):
@@ -416,16 +438,19 @@ class Scheduler(object):
         for task in self.tasks:
             task_duration = task.end_time - task.start_time
             task_num_servers = len(task.servers)
-            if type(task) is Power_off:
-                total_energy = total_energy + energy_calc.energy_off(
-                    task_duration) * task_num_servers
+            if type(task) is PowerOff:
+                total_energy = (
+                    total_energy
+                    + energy_calc.energy_off(task_duration) * task_num_servers
+                )
             else:
-                total_energy = total_energy + energy_calc.energy_computing(
-                    task_duration) * task_num_servers
+                total_energy = (
+                    total_energy
+                    + energy_calc.energy_computing(task_duration) * task_num_servers
+                )
             area = area + task_duration * task_num_servers
-        #adding idle time
-        energy_idle = (work_duration * serv_count -
-                       area) * energy_calc.power_idle()
+        # adding idle time
+        energy_idle = (work_duration * serv_count - area) * energy_calc.power_idle
         total_energy = total_energy + energy_idle
         return total_energy
 
@@ -433,7 +458,7 @@ class Scheduler(object):
         work_duration = self.work_duration()
         serv_count = len(self.servers)
         energy_calc = Energy()
-        idle_power = work_duration * serv_count * energy_calc.power_idle()
+        idle_power = work_duration * serv_count * energy_calc.power_idle
         return self.average_power() / idle_power
 
     def num_reconfig_task(self):
@@ -446,34 +471,37 @@ class Scheduler(object):
     def num_power_off(self):
         num = 0
         for t in self.tasks:
-            if type(t) is Power_off:
+            if type(t) is PowerOff:
                 num = num + 1
         return num
 
     def cost_function(self):
-        return self.stretch_time_weight * self.average_stretch_time(
-        ) + self.energy_weight * self.normalized_average_power()
+        return (
+            self.stretch_time_weight * self.average_stretch_time()
+            + self.energy_weight * self.normalized_average_power()
+        )
 
     def summary(self):
         print("Number of servers: {}".format(len(self.servers)))
         print("Number of jobs scheduled: {}".format(len(self.jobs)))
-        print("Number of reconfigurations: {}".format(
-            self.num_reconfig_task()))
+        print("Number of reconfigurations: {}".format(self.num_reconfig_task()))
         print("Number of power offs: {}".format(self.num_power_off()))
         print("Total work time: {}".format(self.work_duration()))
         print("Cost function value: {}".format(self.cost_function()))
 
     def stats(self):
-        #num reconfig, num power off, min stretch, max stretch, mean stretch, std stretch, av power, cost function
+        # num reconfig, num power off, min stretch, max stretch, mean stretch, std stretch, av power, cost function
         stretch_times = np.array(self.stretch_times())
-        stats = np.array([
-            self.num_reconfig_task(),
-            self.num_power_off(),
-            np.min(stretch_times),
-            np.max(stretch_times),
-            np.mean(stretch_times),
-            np.std(stretch_times),
-            self.normalized_average_power(),
-            self.cost_function()
-        ])
+        stats = np.array(
+            [
+                self.num_reconfig_task(),
+                self.num_power_off(),
+                np.min(stretch_times),
+                np.max(stretch_times),
+                np.mean(stretch_times),
+                np.std(stretch_times),
+                self.normalized_average_power(),
+                self.cost_function(),
+            ]
+        )
         return stats

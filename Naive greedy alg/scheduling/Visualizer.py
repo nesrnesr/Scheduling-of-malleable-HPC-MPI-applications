@@ -36,7 +36,7 @@ class Visualizer():
         }
 
         for task in scheduler.tasks:
-            if type(task) is Power_off:
+            if type(task) is PowerOff:
                 r_col = 0
                 g_col = 0
                 b_col = 0
