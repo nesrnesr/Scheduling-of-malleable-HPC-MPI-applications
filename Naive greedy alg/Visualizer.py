@@ -1,27 +1,23 @@
 from dataclasses import dataclass
 import cairocffi as cairo
 
+
 @dataclass
 class Vector2i():
     x: int = 0
     y: int = 0
 
+
 class Visualizer():
-    def __init__(self,
-                 width=800,
-                 height=800,
-                 grid_draw=True,
-                 x_offset=0.1,
-                 y_offset=0.1):
+    def __init__(self, width=800, height=800, x_offset=0.1, y_offset=0.1):
         self.height = height
         self.width = width
-        self.grid_draw = grid_draw
         self.x_offset = x_offset
         self.y_offset = y_offset
         self.surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, height, width)
         self.context = cairo.Context(self.surface)
 
-    def draw_gantt(self, scheduler, filename):
+    def draw_gantt(self, scheduler, filename, grid_draw=False):
         self._setup_canvas()
         max_time = self._setup_xaxis(scheduler.work_duration())
         num_servers = self._setup_yaxis(scheduler.server_count)
@@ -40,7 +36,15 @@ class Visualizer():
         }
 
         for task in scheduler.tasks:
-            j_id = task.job_id
+            if type(task) is Power_off:
+                r_col = 0
+                g_col = 0
+                b_col = 0
+            else:
+                j_id = task.job_id
+                r_col = jobs_colors[j_id][0]
+                g_col = jobs_colors[j_id][1]
+                b_col = jobs_colors[j_id][2]
             t_time = task.end_time - task.start_time
             for server in task.servers:
                 alpha = 0.5 if isinstance(task, Reconfiguration) else 1.0
@@ -49,12 +53,12 @@ class Visualizer():
                 size = Vector2i(width_scaling * t_time, height_scaling)
                 self._draw_rectangle(tl=tl,
                                      size=size,
-                                     r=jobs_colors[j_id][0],
-                                     g=jobs_colors[j_id][1],
-                                     b=jobs_colors[j_id][2],
+                                     r=r_col,
+                                     g=g_col,
+                                     b=b_col,
                                      alpha=alpha)
 
-        if (self.grid_draw):
+        if (grid_draw):
             self._draw_grid(scheduler.work_duration(), num_servers)
 
         self.context.set_font_size(0.05)
@@ -93,7 +97,7 @@ class Visualizer():
 
     def _draw_rectangle(self,
                         tl=Vector2i(),
-                        size=Vector2i(1,1),
+                        size=Vector2i(1, 1),
                         r=1,
                         g=1,
                         b=1,
@@ -101,6 +105,7 @@ class Visualizer():
         self.context.rectangle(tl.x, tl.y, size.x, size.y)
         self._set_color(r, g, b, alpha)
         self.context.fill()
+        self.x_offset = x_offset
 
     def _set_color(self, r=0, g=0, b=0, alpha=1.0):
         self.context.set_source_rgba(r, g, b, alpha)
@@ -110,8 +115,9 @@ class Visualizer():
         width_scaling = self._scale_axis(self.x_offset, scaled_x)
         height_scaling = self._scale_axis(self.y_offset, ymax)
 
-        for i in range(ceil(xmax) + 1):
-            pos = Vector2i(self.x_offset + i * width_scaling, self.y_offset)
+        for i in range(ceil((xmax + 1) / 1000)):
+            pos = Vector2i(self.x_offset + (i * width_scaling) * 1000,
+                           self.y_offset)
             self._move_cursor(pos)
             pos.y = 1 - pos.y
             self._draw_line(pos)

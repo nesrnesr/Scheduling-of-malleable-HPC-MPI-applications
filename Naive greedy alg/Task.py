@@ -1,4 +1,4 @@
-class Task():
+class Task(object):
     def __init__(self, job_id, mass_executed, servers, start_time, end_time):
         self.job_id = job_id
         self.mass_executed = mass_executed
