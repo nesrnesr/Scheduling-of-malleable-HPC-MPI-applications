@@ -1,12 +1,11 @@
-from math import ceil
-from random import sample
-from statistics import mean
-from .Task import Task
-from .Reconfiguration import Reconfiguration
-from .PowerOff import PowerOff
-from .Energy import Energy
 from dataclasses import dataclass
-import numpy as np
+from math import ceil
+from operator import attrgetter, methodcaller
+from random import sample
+from statistics import mean, pstdev
+
+from .Job import Job
+from .Server import Server
 
 
 @dataclass
@@ -28,459 +27,229 @@ class SchedulerConfig:
     energy_weight: float = 1
 
 
+@dataclass
+class SchedulerStats:
+    complete_jobs: dict
+    start_time: int
+    end_time: int
+    work_duration: int
+    reconfig_count: int
+    power_off_count: int
+    min_stretch_time: int
+    max_stretch_time: int
+    mean_stretch_time: float
+    stdev_stretch_time: float
+    average_power_norm: float
+    cost: float
+
+    def to_dict(self):
+        dict_obj = self.__dict__
+        dict_obj.pop("complete_jobs")
+        return dict_obj
+
+
 class Scheduler(object):
     def __init__(self, servers, conf):
         self.servers = servers
-        self.jobs = []
-        self.tasks = []
-        self.job_queued = []
         self.conf = conf
+        self.req_queue = []
+        self.req_by_id = {}
+        self.active_jobs = []
+        self.complete_jobs = {}
 
-    def schedule1(self, job):
-        self.jobs.append(job)
-        self.job_queued.append(job)
-        self.update_schedule1(job.sub_time)
+    def is_working(self):
+        return self.req_queue or self.active_jobs
 
-    def update_schedule1(self, time):
-        if self._is_ratio_available_servers_above_threshold(time):
-            while self.job_queued:
-                self._order_queue_by_sub_time()
-                job_to_sched = self.job_queued[0]
-                num_servers_to_use = self._num_server_alloc(job_to_sched, time)
-                if num_servers_to_use > 0:
-                    available_servers = self._available_servers(time)
-                    self._schedule_task_given_num_servers(
-                        num_servers_to_use, available_servers, job_to_sched, time
-                    )
-                    self.job_queued.remove(job_to_sched)
-                else:
-                    break
-                if self._is_ratio_available_servers_above_threshold(time):
-                    break
+    def schedule(self, job_request):
+        self.req_queue.append(job_request)
+        self.req_queue.sort(key=attrgetter("sub_time"), reverse=True)
+        self.req_by_id[job_request.id] = job_request
 
-        if self._is_ratio_available_servers_above_threshold(time):
-            # order job by remaining mass
-            jobs_by_mass = self._jobs_by_mass_remaining(time)
-            while jobs_by_mass:
-                job_reconfig = jobs_by_mass[0]
-                if self._is_job_reconfigurable(job_reconfig, time):
-                    task_to_reconfig = self._current_task_of_job(job_reconfig, time)
-                    self._reconfigure_task(task_to_reconfig, time)
-                    jobs_by_mass.remove(job_reconfig)
-                if self._is_ratio_available_servers_above_threshold(time):
-                    break
+    def update_schedule(self, time):
+        complete_jobs = [job for job in self.active_jobs if job.is_complete(time)]
+        while complete_jobs:
+            job = complete_jobs.pop()
+            self.active_jobs.remove(job)
+            # print(f"remove {job}, active: {self.active_jobs}")
+            for server in job.servers:
+                server.remove_job(job)
 
-        if self._num_available_servers(
-            time
-        ) != 0 and not self._is_ratio_available_servers_above_threshold(time):
-            num_jobs_currently_executed = 0
-            num_jobs_finishing_under_threshold_time = 0
-            for job in self.jobs:
-                job_termination_time = self._job_termination_time(job)
-                if job_termination_time > time:
-                    num_jobs_currently_executed += 1
-                    time_remaining = job_termination_time - time
-                    if time_remaining < self.conf.time_remaining_for_power_off:
-                        num_jobs_finishing_under_threshold_time += 1
-            if (
-                num_jobs_currently_executed > 0
-                and num_jobs_finishing_under_threshold_time
-                / num_jobs_currently_executed
-                <= self.conf.ratio_almost_finished_jobs
-            ):
-                available_servers = self._available_servers(time)
-                self.turn_off_servers(available_servers, time)
+            completed_jobs = self.complete_jobs.get(job.id, [])
+            completed_jobs.append(job)
+            self.complete_jobs[job.id] = completed_jobs
 
-    ############################################
-    # Reconfigure a job if possible
+        av_servers = [server for server in self.servers if not server.is_busy(time)]
+        while self.req_queue and self._enough_available_servers(av_servers):
+            job_req = self.req_queue[-1]
+            job_servers = self._allocate_servers(av_servers, job_req)
+            if not job_servers:
+                break
+            job = Job.from_request(job_req, job_servers, time)
+            print(f"new {job}, {len(job_servers)}")
+            self._start_job(job)
+            self.req_queue.pop()
+            av_servers = [server for server in av_servers if server not in job_servers]
 
-    def schedule_simple(self, job):
-        self.jobs.append(job)
-
-        # schedule the first job into one task
-        if len(self.tasks) == 0:
-            self._schedule_task(self.servers, job, job.sub_time)
-        # Schedule the jobs
-        else:
-            # Get the servers available at submission time
-            available_servers = self._available_servers(job.sub_time)
-            if len(available_servers) < job.min_num_servers:
-                self.job_queued.append(job)
-                return
-            # Schedule task
-            else:
-                self._schedule_task(available_servers, job, job.sub_time)
-
-    def update_schedule_simple(self, time):
-        # get the free servers
-        available_servers = self._available_servers(time + 0.01)
-        num_available_servers = len(available_servers)
-
-        # print('Number of available servers at update: ', num_available_servers)
-
-        # Check if there is job queued
-        if self.job_queued:
-            # Try to schedule each job
-            for job in self.job_queued:
-                if num_available_servers > job.min_num_servers:
-                    self._schedule_task(available_servers, job, time)
-                    # remove job from queue
-                    self.job_queued.remove(job)
-                    # update list of servers available
-                    available_servers = self._available_servers(time + 0.01)
-                    num_available_servers = len(available_servers)
-
-        # find tasks that could be reconfigured
-        # List of tasks for which the possible change of the number of servers is greater than 0
-        tasks_candidates = [
-            t
-            for t in self.tasks
-            if self._task_possible_inc_num_ser(t, time, num_available_servers) > 0
-        ]
-
-        if len(tasks_candidates) == 0:
-            return
-
-        task_to_reconfig = tasks_candidates[0]
-        self._reconfigure_task(task_to_reconfig, time)
-
-    def _reconfigure_task(self, task, time):
-        available_servers = self._available_servers(time + 0.01)
-        num_available_servers = len(available_servers)
-
-        # Return the list of new servers to execute the task
-        def reallocate_task_servers(task):
-            extra_srv_count = self._task_possible_inc_num_ser(
-                task, time, num_available_servers
-            )
-            task_servers = [s for s in task.servers]
-            for i in range(extra_srv_count):
-                task_servers.append(available_servers[i])
-            return task_servers
-
-        # Reconfigure and update the task
-        # Update the task end_time and mass_executed.
-        def interrupt_task(task, job):
-            task.end_time = time
-            exec_time = task.end_time - task.start_time
-            task.mass_executed = self._mass_exec(
-                job.alpha, len(task.servers), exec_time
-            )
-
-        # Create a new task for reconfiguration
-
-        def make_reconfiguration(job, servers):
-            reconfig_time = self._reconfig_time(
-                job.data, len(task.servers), len(servers)
-            )
-            reconfig_end_time = time + reconfig_time
-            reconfig = Reconfiguration(job.id, servers, time, reconfig_end_time)
-            self.tasks.append(reconfig)
-            return reconfig
-
-        # Create a task to finish job after reconfig
-        def reschedule_interrupted(job, reconfig, servers):
-            mass_left = job.mass - self._mass_executed(job, time)
-            exec_time = self._exec_time(mass_left, job.alpha, len(servers))
-            start_time = reconfig.end_time
-            end_time = reconfig.end_time + exec_time
-            mass_executed = mass_left
-            self.tasks.append(
-                Task(job.id, mass_executed, servers, start_time, end_time)
-            )
-
-        task_job = self._task_job(task)
-        task_servers = reallocate_task_servers(task)
-        interrupt_task(task, task_job)
-        reconfig = make_reconfiguration(task_job, task_servers)
-        reschedule_interrupted(task_job, reconfig, task_servers)
-
-    def turn_off_servers(self, servers, time):
-        self.tasks.append(PowerOff(servers, time, time + self.conf.shut_down_time))
-
-    #################################################################
-    def _is_job_reconfigurable(self, job, time):
-        # print(job.id)
-        if abs(job.sub_time - time) < 0.001:
-            return False
-        remaining_time = self._job_termination_time(job) - time
-        # task to reconfigure
-        task = self._current_task_of_job(job, time)
-        if task is None or type(task) is Reconfiguration:
-            return False
-        # estimate exec time if task is reconfigured
-        current_srv_count = len(task.servers)
-        extra_srv_count = self._task_possible_inc_num_ser(
-            task, time, self._num_available_servers(time)
+        jobs_by_mass = sorted(
+            self.active_jobs, key=methodcaller("remaining_mass", time)
         )
-        new_srv_count = current_srv_count + extra_srv_count
-        # Reconfiguration time
-        reconfig_time = self._reconfig_time(job.data, current_srv_count, new_srv_count)
+        while jobs_by_mass and self._enough_available_servers(av_servers):
+            job = jobs_by_mass[0]
+            if self._is_job_reconfigurable(job, av_servers, time):
+                av_servers = self._reconfigure_job(job, av_servers, time)
+            jobs_by_mass.pop(0)
 
-        # Mass remaining to execute until time
-        mass_left = task.mass_executed - self._mass_exec(
-            job.alpha, len(task.servers), time - task.start_time
-        )
-
-        # execution time on new srv count
-        exec_time = self._exec_time(mass_left, job.alpha, new_srv_count)
         if (
-            reconfig_time + exec_time
-        ) / remaining_time < self.conf.estimated_improv_threshold:
-            return True
-        else:
+            self.active_jobs
+            and av_servers
+            and not self._enough_available_servers(av_servers)
+        ):
+            under_threshold = 0
+            for job in self.active_jobs:
+                if job.remaining_time(time) < self.conf.time_remaining_for_power_off:
+                    under_threshold += 1
+
+            ratio_finishing_jobs = under_threshold / len(self.active_jobs)
+            if ratio_finishing_jobs <= self.conf.ratio_almost_finished_jobs:
+                power_off = Job.make_power_off(
+                    av_servers, start_time=time, duration=self.conf.shut_down_time
+                )
+                self._start_job(power_off)
+
+    def _start_job(self, *jobs):
+        for job in jobs:
+            self.active_jobs.append(job)
+            for server in job.servers:
+                server.add_job(job)
+
+    def _reconfigure_job(self, job, av_servers, time):
+        job.interupt(time)
+        extra_srv_count = min(job.max_server_count - job.server_count, len(av_servers))
+        extra_srvs = sample(av_servers, extra_srv_count)
+        job_servers = job.servers + extra_srvs
+        av_servers = [server for server in av_servers if server not in extra_srvs]
+
+        print(f"reconfigure {job} with {len(job_servers)} servers")
+        reconfig_job, job_rest = job.reconfigure(job_servers, time)
+        self._start_job(reconfig_job, job_rest)
+
+        return av_servers
+
+    def _is_job_reconfigurable(self, job, av_servers, time):
+        if not job.is_reconfigurable():
             return False
 
-    def _current_task_of_job(self, job, time):
-        for t in self.tasks:
-            if time > t.start_time and time < t.end_time and t.job_id == job.id:
-                return t
-
-    def _job_termination_time(self, job):
-        term_time = -1
-        for t in self.tasks:
-            if t.job_id == job.id and t.end_time > term_time:
-                term_time = t.end_time
-        return term_time
-
-    def _job_start_time(self, job):
-        start_time = inf
-        for t in self.tasks:
-            if t.job_id == job.id and t.start_time < start_time:
-                start_time = t.start_time
-        return start_time
-
-    ######## Can be probably tuned as well #################
-    def _num_server_alloc(self, job, time):
-        num_available_servers = self._num_available_servers(time)
-
-        if job.alpha > self.conf.alpha_mid:
-            min_servers = ceil(
-                self.conf.alpha_min_server_upper_range * len(self.servers)
-            )
-            return min(min_servers, job.max_num_servers, num_available_servers)
-        elif job.alpha > self.conf.alpha_lower:
-            min_servers = ceil(self.conf.alpha_min_server_mid_range * len(self.servers))
-            return min(min_servers, job.max_num_servers, num_available_servers)
-        else:
-            min_servers = ceil(
-                self.conf.alpha_min_server_lower_range * len(self.servers)
-            )
-            return min(min_servers, job.max_num_servers, num_available_servers)
-
-    def _order_queue_by_sub_time(self):
-        self.job_queued = sorted(self.job_queued, key=lambda k: k.sub_time)
-
-    def _is_ratio_available_servers_above_threshold(self, time):
-        if self._ratio_available_servers(time) > self.conf.server_threshold:
-            return True
-        else:
+        extra_srv_count = min(job.max_server_count - job.server_count, len(av_servers))
+        if extra_srv_count == 0:
             return False
 
-    def _ratio_available_servers(self, time):
-        return len(self._available_servers(time)) / len(self.servers)
+        new_srv_count = job.server_count + extra_srv_count
+        reconfig_time = job.reconfiguration_time(new_srv_count)
+        mass_left = job.remaining_mass(time)
+        new_remaining_time = Job.exec_time(mass_left, new_srv_count, job.alpha)
+        return (reconfig_time + new_remaining_time) / job.remaining_time(
+            time
+        ) < self.conf.estimated_improv_threshold
 
-    def _num_available_servers(self, time):
-        return len(self._available_servers(time))
+    def _allocate_servers(self, available_servers, job_req):
+        limits = [
+            self.conf.alpha_min_server_lower_range,
+            self.conf.alpha_min_server_mid_range,
+            self.conf.alpha_min_server_upper_range,
+        ]
+        alpha = next((limit for limit in limits if job_req.alpha < limit), 1)
+        min_servers = ceil(alpha * len(self.servers))
+        min_servers = min(min_servers, job_req.max_num_servers, len(available_servers))
+        print(f"allocate {job_req} with {min_servers} ")
+        if min_servers < job_req.min_num_servers:
+            return []
+        return sample(available_servers, k=min_servers)
 
-    # returns a list of servers not utilized at a given time
-    def _available_servers(self, time):
-        # Start with all servers as potential servers
-        candidate_servers = [s for s in self.servers]
-        # remove servers that are busy at the given time
-        for t in self.tasks:
-            if not (t.start_time <= time and t.end_time > time):
-                continue
-            for s in t.servers:
-                if s in candidate_servers:
-                    candidate_servers.remove(s)
-        return candidate_servers
+    def _enough_available_servers(self, servers):
+        return len(servers) / len(self.servers) > self.conf.server_threshold
 
-    def _schedule_task_given_num_servers(self, num_servers, servers, job, time):
-        servers_selec = sample(servers, k=num_servers)
-        exec_time = self._exec_time(job.mass, job.alpha, num_servers)
-        self.tasks.append(Task(job.id, job.mass, servers_selec, time, time + exec_time))
-
-    def _schedule_task(self, servers, job, time):
-        num_servers = min(job.max_num_servers, len(servers))
-        servers = sample(servers, k=num_servers)
-        exec_time = self._exec_time(job.mass, job.alpha, num_servers)
-        self.tasks.append(Task(job.id, job.mass, servers, time, time + exec_time))
-
-    # Returns the possible increase in the number of servers for a task
-    # given that num_servers are not busy
-    def _task_possible_inc_num_ser(self, task, time, num_servers):
-        # job = list(filter(lambda j: (j.id == task.job_id), self.jobs))[0]
-        if task.end_time <= time:
-            return 0
-        job = next(j for j in self.jobs if (j.id == task.job_id))
-        task_num_servers = len(task.servers)
-        if task_num_servers == job.max_num_servers:
-            return 0
-        elif task_num_servers + num_servers > job.max_num_servers:
-            return job.max_num_servers - task_num_servers
-        else:
-            return num_servers
-
-    # Formula for communication time
-    def _mass_exec(self, alpha, num_serv, exec_time):
-        return exec_time * (num_serv) ** alpha
-
-    def _exec_time(self, mass, alpha, num_serv):
-        return mass / (num_serv) ** alpha
-
-    # Calculates the reconfiguration time
-    def _reconfig_time(self, data, init_servers, final_servers):
-        if init_servers > final_servers:
-            return data / init_servers * (ceil(init_servers / final_servers) - 1)
-        return data / final_servers * (ceil(final_servers / init_servers) - 1)
-
-    ############################################################
-    def _jobs_by_mass_remaining(self, time):
-        jobs_by_mass = []
-        for j in self.jobs:
-            if j.sub_time < time:
-                m = self._mass_remaining(j, time)
-                if m > 0:
-                    jobs_by_mass.append([j, m])
-        jobs_by_mass = sorted(jobs_by_mass, key=lambda k: k[1], reverse=True)
-        return [j[0] for j in jobs_by_mass]
-
-    def _mass_remaining(self, job, time):
-        return job.mass - self._mass_executed_at_time(job, time)
-
-    # Finds how much mass has been executing of job at time t
-    def _mass_executed_at_time(self, job, time):
-        mass_ex = 0
-        for t in self.tasks:
-            if t.job_id == job.id:
-                if t.end_time <= time:
-                    mass_ex += t.mass_executed
-                else:
-                    mass_ex += t.mass_executed - self._mass_exec(
-                        job.alpha, len(t.servers), time - t.start_time
-                    )
-        return mass_ex
-
-    # Finds how much mass has been executing of job
-    def _mass_executed(self, job, time):
-        mass_ex = 0
-        for t in self.tasks:
-            if t.job_id == job.id:
-                mass_ex += t.mass_executed
-        return mass_ex
-
-    # Returns the makespan
-    def work_duration(self):
-        min_time = min([t.start_time for t in self.tasks])
-        max_time = max([t.end_time for t in self.tasks])
-        return max_time - min_time
-
-    def job_ids(self):
-        return [j.id for j in self.jobs]
-
-    def server_ids(self):  # server_id_list
-        return [s.id for s in self.servers]
-
-    @property
-    def server_count(self):
-        return len(self.servers)
-
-    # Returns the job that a task is executing
-    def _task_job(self, task):
-        return next(j for j in self.jobs if task.from_job(j))
-
-    def stretch_time(self, job):
-        # find the termination time from the tasks of that job and subtime, divide the difference by the mass
-        term_time = -1
-        for t in self.tasks:
-            if t.job_id == job.id and t.end_time > term_time:
-                term_time = t.end_time
-        return (term_time - job.sub_time) / job.mass
-
-    def stretch_times(self):
-        # array of all the stretch times
-        return [self.stretch_time(j) for j in self.jobs]
-
-    def average_stretch_time(self):
-        return mean(self.stretch_times())
-
-    def max_stretch_time(self):
-        return max(self.stretch_times())
-
-    def average_power(self):
-        work_duration = self.work_duration()
-        serv_count = len(self.servers)
-        total_energy = 0
-        area = 0
-        energy_calc = Energy()
-        for task in self.tasks:
-            task_duration = task.end_time - task.start_time
-            task_num_servers = len(task.servers)
-            if type(task) is PowerOff:
-                total_energy = (
-                    total_energy
-                    + energy_calc.energy_off(task_duration) * task_num_servers
-                )
-            else:
-                total_energy = (
-                    total_energy
-                    + energy_calc.energy_computing(task_duration) * task_num_servers
-                )
-            area = area + task_duration * task_num_servers
-        # adding idle time
-        energy_idle = (work_duration * serv_count - area) * energy_calc.power_idle
-        total_energy = total_energy + energy_idle
-        return total_energy
-
-    def normalized_average_power(self):
-        work_duration = self.work_duration()
-        serv_count = len(self.servers)
-        energy_calc = Energy()
-        idle_power = work_duration * serv_count * energy_calc.power_idle
-        return self.average_power() / idle_power
-
-    def num_reconfig_task(self):
-        num = 0
-        for t in self.tasks:
-            if type(t) is Reconfiguration:
-                num = num + 1
-        return num
-
-    def num_power_off(self):
-        num = 0
-        for t in self.tasks:
-            if type(t) is PowerOff:
-                num = num + 1
-        return num
-
-    def cost_function(self):
-        return (
-            self.conf.stretch_time_weight * self.average_stretch_time()
-            + self.conf.energy_weight * self.normalized_average_power()
-        )
+    #############################################
 
     def summary(self):
         print("Number of servers: {}".format(len(self.servers)))
         print("Number of jobs scheduled: {}".format(len(self.jobs)))
-        print("Number of reconfigurations: {}".format(self.num_reconfig_task()))
-        print("Number of power offs: {}".format(self.num_power_off()))
-        print("Total work time: {}".format(self.work_duration()))
-        print("Cost function value: {}".format(self.cost_function()))
+        print("Number of reconfigurations: {}".format(self._num_reconfig_job()))
+        print("Number of power offs: {}".format(self._num_power_off()))
+        print("Total work time: {}".format(self._work_duration()))
+        print("Cost function value: {}".format(self._cost_function()))
 
     def stats(self):
-        # num reconfig, num power off, min stretch, max stretch, mean stretch, std stretch, av power, cost function
-        stretch_times = np.array(self.stretch_times())
-        stats = np.array(
-            [
-                self.num_reconfig_task(),
-                self.num_power_off(),
-                np.min(stretch_times),
-                np.max(stretch_times),
-                np.mean(stretch_times),
-                np.std(stretch_times),
-                self.normalized_average_power(),
-                self.cost_function(),
-            ]
+        stretch_times = self._stretch_times()
+        start_time, end_time = self._work_span()
+        return SchedulerStats(
+            complete_jobs=self.complete_jobs,
+            start_time=start_time,
+            end_time=end_time,
+            work_duration=self._work_duration(),
+            reconfig_count=self._num_reconfig_job(),
+            power_off_count=self._num_power_off(),
+            min_stretch_time=min(stretch_times),
+            max_stretch_time=max(stretch_times),
+            mean_stretch_time=mean(stretch_times),
+            stdev_stretch_time=pstdev(stretch_times),
+            average_power_norm=self._normalized_average_power(),
+            cost=self._cost_function(stretch_times),
         )
-        return stats
+
+    def _work_span(self):
+        jobs = [job for jobs_by_id in self.complete_jobs.values() for job in jobs_by_id]
+        first = min(jobs, key=attrgetter("start_time"))
+        last = max(jobs, key=attrgetter("end_time"))
+        return first.start_time, last.end_time
+
+    def _work_duration(self):
+        jobs = [job for jobs_by_id in self.complete_jobs.values() for job in jobs_by_id]
+        first = min(jobs, key=attrgetter("start_time"))
+        last = max(jobs, key=attrgetter("end_time"))
+        return last.end_time - first.start_time
+
+    def _stretch_times(self):
+        def stretch_time(job_req):
+            last = self.complete_jobs[job_req.id][-1]
+            return (last.end_time - job_req.sub_time) / job_req.mass
+
+        return [stretch_time(j) for j in self.req_by_id.values()]
+
+    def _normalized_average_power(self):
+        def average_power(work_duration):
+            jobs = [
+                job for jobs_by_id in self.complete_jobs.values() for job in jobs_by_id
+            ]
+            total_energy = 0
+            area = 0
+            for job in jobs:
+                srv_count = len(job.servers)
+                if job.is_power_off():
+                    total_energy += Server.Consumption.reboot(job.duration) * srv_count
+                else:
+                    total_energy += Server.Consumption.active(job.duration) * srv_count
+                area += job.duration * srv_count
+            # adding idle time
+            energy_idle = Server.Consumption.idle(
+                work_duration * len(self.servers) - area
+            )
+            return total_energy + energy_idle
+
+        work_duration = self._work_duration()
+        idle_power = Server.Consumption.idle(work_duration) * len(self.servers)
+        return average_power(work_duration) / idle_power
+
+    def _num_reconfig_job(self):
+        return sum(
+            sum(job.is_reconfiguration() for job in jobs)
+            for jobs in self.complete_jobs.values()
+        )
+
+    def _num_power_off(self):
+        return len(self.complete_jobs.get(Job.POWER_OFF_ID, []))
+
+    def _cost_function(self, stretch_times):
+        return (
+            self.conf.stretch_time_weight * mean(stretch_times)
+            + self.conf.energy_weight * self._normalized_average_power()
+        )
