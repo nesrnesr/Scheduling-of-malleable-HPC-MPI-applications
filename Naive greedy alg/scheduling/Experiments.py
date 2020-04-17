@@ -6,11 +6,11 @@ from .Scheduler import Scheduler, SchedulerConfig
 
 
 class Experiments:
-    def __init__(self, seed):
+    def __init__(self, seed = 2):
         self.seed = seed
 
     def make_random_config(self):
-        seed(self.seed)
+        #seed(self.seed)
         c = SchedulerConfig()
         c.server_threshold = uniform(0.05, 0.2)
         c.ratio_almost_finished_jobs = uniform(0.5, 0.91)

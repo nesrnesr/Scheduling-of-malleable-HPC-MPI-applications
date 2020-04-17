@@ -11,7 +11,7 @@ from .Server import Server
 
 @dataclass
 class SchedulerConfig:
-    server_count: int = 4
+    server_count: int = 10
     server_threshold: float = 0.7
     ratio_almost_finished_jobs: float = 0.8
     time_remaining_for_power_off: int = 370
@@ -28,6 +28,9 @@ class SchedulerConfig:
     stretch_time_weight: float = 1
     energy_weight: float = 1
 
+    def to_dict(self):
+        dict_obj = self.__dict__
+        return dict_obj
 
 @dataclass
 class SchedulerStats:

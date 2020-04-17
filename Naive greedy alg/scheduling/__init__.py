@@ -4,6 +4,7 @@ import pandas as pd
 
 from .Experiments import Experiments
 from .Visualizer import Visualizer
+from .Swarm import Swarm
 
 
 def _draw_result(seed, stats, config):
@@ -24,8 +25,7 @@ def main():
     )
 
     seed = 1
-    experiments = Experiments(seed=seed)
-    config = experiments.make_random_config()
-    stats = experiments.run_expts(config, num_expts=2)
-
-    _draw_result(seed, stats, config)
+    swarm = Swarm(num_particles = 10, seed = seed)
+    swarm.configs()
+    print(swarm.run_epochs(num_epochs=50))
+    swarm.configs()
