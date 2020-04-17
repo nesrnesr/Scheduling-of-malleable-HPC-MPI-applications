@@ -1,4 +1,5 @@
 from dataclasses import astuple, dataclass
+from pathlib import Path
 from random import random
 
 import matplotlib.pyplot as plt
@@ -19,10 +20,10 @@ class Color:
 
 
 class Visualizer:
-    def __init__(self):
-        pass
+    def draw_gantt(self, stats, filepath):
+        path = Path(filepath)
+        path.parent.mkdir(0o755, parents=True, exist_ok=True)
 
-    def draw_gantt(self, servers, stats, filename, grid_draw=True):
         power_off_color = Color(0, 0, 0)
         for jobs in stats.complete_jobs.values():
             job_color = Color(random(), random(), random())
@@ -31,14 +32,14 @@ class Visualizer:
                 if job.is_power_off():
                     job_color = power_off_color
                 for server in job.servers:
-                    tl = Vector2i(job.start_time, servers.index(server))
+                    tl = Vector2i(job.start_time, server.index)
                     size = Vector2i(job.duration, 1)
                     self._draw_rectangle(tl=tl, size=size, color=job_color)
 
         plt.ylabel("servers")
         plt.xlabel("time")
         plt.axis("auto")
-        plt.savefig(filename, dpi=200)
+        plt.savefig(filepath, dpi=200)
 
     def _draw_rectangle(self, tl, size, color):
         rectangle = plt.Rectangle((tl.x, tl.y), size.x, size.y, fc=astuple(color))

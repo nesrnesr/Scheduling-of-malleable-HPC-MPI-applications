@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from math import ceil
 from operator import attrgetter, methodcaller
@@ -10,6 +11,7 @@ from .Server import Server
 
 @dataclass
 class SchedulerConfig:
+    server_count: int = 4
     server_threshold: float = 0.7
     ratio_almost_finished_jobs: float = 0.8
     time_remaining_for_power_off: int = 370
@@ -49,13 +51,15 @@ class SchedulerStats:
 
 
 class Scheduler(object):
-    def __init__(self, servers, conf):
-        self.servers = servers
+    def __init__(self, conf):
+        self.servers = [Server(i) for i in range(conf.server_count)]
         self.conf = conf
         self.req_queue = []
         self.req_by_id = {}
         self.active_jobs = []
         self.complete_jobs = {}
+
+        self.logger = logging.getLogger(__name__)
 
     def is_working(self):
         return self.req_queue or self.active_jobs
@@ -70,7 +74,7 @@ class Scheduler(object):
         while complete_jobs:
             job = complete_jobs.pop()
             self.active_jobs.remove(job)
-            # print(f"remove {job}, active: {self.active_jobs}")
+            self.logger.debug(f"remove {job}, active: {self.active_jobs}")
             for server in job.servers:
                 server.remove_job(job)
 
@@ -85,7 +89,7 @@ class Scheduler(object):
             if not job_servers:
                 break
             job = Job.from_request(job_req, job_servers, time)
-            print(f"new {job}, {len(job_servers)}")
+            self.logger.debug(f"new {job}, {len(job_servers)}")
             self._start_job(job)
             self.req_queue.pop()
             av_servers = [server for server in av_servers if server not in job_servers]
@@ -129,7 +133,7 @@ class Scheduler(object):
         job_servers = job.servers + extra_srvs
         av_servers = [server for server in av_servers if server not in extra_srvs]
 
-        print(f"reconfigure {job} with {len(job_servers)} servers")
+        self.logger.debug(f"reconfigure {job} with {len(job_servers)} servers")
         reconfig_job, job_rest = job.reconfigure(job_servers, time)
         self._start_job(reconfig_job, job_rest)
 
@@ -160,7 +164,7 @@ class Scheduler(object):
         alpha = next((limit for limit in limits if job_req.alpha < limit), 1)
         min_servers = ceil(alpha * len(self.servers))
         min_servers = min(min_servers, job_req.max_num_servers, len(available_servers))
-        print(f"allocate {job_req} with {min_servers} ")
+        self.logger.debug(f"Try allocating {job_req} with {min_servers} ")
         if min_servers < job_req.min_num_servers:
             return []
         return sample(available_servers, k=min_servers)

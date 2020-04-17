@@ -1,13 +1,8 @@
-import sys
 from math import ceil
 from random import randrange, seed, uniform
 
-import pandas as pd
-
 from .JobRequest import JobRequest
 from .Scheduler import Scheduler, SchedulerConfig
-from .Server import Server
-from .Visualizer import Visualizer
 
 
 class Experiments:
@@ -39,12 +34,11 @@ class Experiments:
         for i in range(num_expts):
             expt_stats = self._run_expt(config)
             stats.append(expt_stats)
-        return pd.concat(stats)
+        return stats
 
     def _run_expt(self, config):
-        servers = [Server("server" + str(i)) for i in range(8)]
-        scheduler = Scheduler(servers, config)
-        jobs = self._generate_jobs(30, len(servers))
+        scheduler = Scheduler(config)
+        jobs = self._generate_jobs(30, config.server_count)
 
         time = 0
         while jobs or scheduler.is_working():
@@ -58,13 +52,9 @@ class Experiments:
             scheduler.update_schedule(time)
             time += 10
 
-        stats = scheduler.stats()
-        visualizer = Visualizer()
-        visualizer.draw_gantt(servers, stats, "result.png")
+        return scheduler.stats()
 
-        stat_dict = stats.to_dict()
-        return pd.DataFrame(stat_dict, index=[0])
-
+    # Reconfiguration example
     # def _generate_jobs(self, _, server_count):
     #     a = JobRequest(
     #         id="A",
