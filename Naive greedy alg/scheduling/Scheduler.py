@@ -83,7 +83,7 @@ class Scheduler(object):
             self.complete_jobs[job.id] = completed_jobs
 
         av_servers = [server for server in self.servers if not server.is_busy(time)]
-        while self.req_queue and self._enough_available_servers(av_servers):
+        while self.req_queue and av_servers:
             job_req = self.req_queue[-1]
             job_servers = self._allocate_servers(av_servers, job_req)
             if not job_servers:
