@@ -1,19 +1,25 @@
-import numpy as np
+from math import inf
+from random import seed
+from statistics import mean
+
 import pandas as pd
 
 from .Experiments import Experiments
 from .Particle import Particle
-from math import inf
-
+from .Scheduler import SchedulerConfig
 
 
 class Swarm(object):
-    def __init__(self, num_particles, seed):
-        self.num_particles = num_particles
-        self.population, self.best_particle = self._init_population()
+    def __init__(self, seed_num, num_particles, num_srvs, num_exp=10):
+        seed(seed_num)
+        self.population = [
+            Particle(SchedulerConfig.random()) for _ in range(num_particles)
+        ]
+        self.num_srvs = num_srvs
+        self.num_exp = num_exp
+        self.best_particle = SchedulerConfig.random()
         self.best_cost = inf
-        self.seed = seed
-
+        self.experiment = Experiments()
 
     def run_epochs(self, num_epochs):
         for i in range(num_epochs):
@@ -23,18 +29,18 @@ class Swarm(object):
 
     def _run_epoch(self):
         self.best_cost = inf
-        i=0
+        i = 0
         for particle in self.population:
             print("Particle: ", i)
             df_configs = particle.config.to_dict()
-            print( df_configs)
-            i+=1
-            experiments = Experiments(seed = 12)
-            stats = experiments.run_expts(particle.config, num_expts = 10)
-            df_stat = pd.DataFrame([stat.to_dict() for stat in stats])
-            cost = df_stat["cost"].mean()
+            print(df_configs)
+            i += 1
+            stats = self.experiment.run_expts(
+                particle.config, num_srvs=self.num_srvs, num_expts=self.num_exp
+            )
+            cost = mean([stat.cost for stat in stats])
             if cost < self.best_cost:
-                self.best_cost= cost
+                self.best_cost = cost
                 self.best_particle = particle
             particle.update_cost(cost)
 
@@ -44,13 +50,8 @@ class Swarm(object):
         print(self.best_cost)
         self.configs()
 
-
-
-    def _init_population(self):
-        expt = Experiments()
-        return [Particle(expt.make_random_config()) for _ in range(self.num_particles)], expt.make_random_config()
-
     def configs(self):
         df_configs = pd.DataFrame([p.config.to_dict() for p in self.population])
         print("Experiment configs:\n", df_configs)
-    #Save stats at each epoch: best/min, max, mean stdv cost
+
+    # Save stats at each epoch: best/min, max, mean stdv cost

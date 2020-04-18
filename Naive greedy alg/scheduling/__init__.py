@@ -2,9 +2,8 @@ import logging
 
 import pandas as pd
 
-from .Experiments import Experiments
-from .Visualizer import Visualizer
 from .Swarm import Swarm
+from .Visualizer import Visualizer
 
 
 def _draw_result(seed, stats, config):
@@ -24,8 +23,7 @@ def main():
         level=logging.INFO, format="%(asctime)s %(name)s %(levelname)-5s: %(message)s"
     )
 
-    seed = 1
-    swarm = Swarm(num_particles = 10, seed = seed)
+    swarm = Swarm(seed_num=1, num_particles=10, num_srvs=10, num_exp=10)
     swarm.configs()
     print(swarm.run_epochs(num_epochs=50))
     swarm.configs()

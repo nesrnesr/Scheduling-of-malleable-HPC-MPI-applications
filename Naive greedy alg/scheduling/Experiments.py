@@ -1,44 +1,21 @@
 from math import ceil
-from random import randrange, seed, uniform
+from random import randrange, uniform
 
 from .JobRequest import JobRequest
-from .Scheduler import Scheduler, SchedulerConfig
+from .Scheduler import Scheduler
 
 
 class Experiments:
-    def __init__(self, seed = 2):
-        self.seed = seed
-
-    def make_random_config(self):
-        #seed(self.seed)
-        c = SchedulerConfig()
-        c.server_threshold = uniform(0.05, 0.2)
-        c.ratio_almost_finished_jobs = uniform(0.5, 0.91)
-        c.time_remaining_for_power_off = uniform(370, 600)
-        c.shut_down_time = uniform(
-            c.time_remaining_for_power_off, c.time_remaining_for_power_off * 2
-        )
-        c.estimated_improv_threshold = uniform(0.5, 0.91)
-        c.alpha_min_server_lower_range = uniform(0.01, 0.4)
-        c.alpha_min_server_mid_range = uniform(
-            c.alpha_min_server_lower_range, c.alpha_min_server_lower_range * 2
-        )
-        c.alpha_min_server_upper_range = uniform(c.alpha_min_server_mid_range, 1)
-        c.alpha_lower = uniform(0.5, 0.7)
-        c.alpha_mid = uniform(c.alpha_lower, 0.9)
-        return c
-
-    def run_expts(self, config, num_expts):
-        seed(self.seed)
+    def run_expts(self, config, num_srvs, num_expts):
         stats = []
         for i in range(num_expts):
-            expt_stats = self._run_expt(config)
+            expt_stats = self._run_expt(num_srvs, config)
             stats.append(expt_stats)
         return stats
 
-    def _run_expt(self, config):
-        scheduler = Scheduler(config)
-        jobs = self._generate_jobs(30, config.server_count)
+    def _run_expt(self, num_srvs, config):
+        scheduler = Scheduler(num_srvs, config)
+        jobs = self._generate_jobs(30, num_srvs)
 
         time = 0
         while jobs or scheduler.is_working():
@@ -52,7 +29,7 @@ class Experiments:
             scheduler.update_schedule(time)
             time += 10
 
-        return scheduler.stats()
+        return scheduler.stats(stretch_time_weight=1, energy_weight=1)
 
     # Reconfiguration example
     # def _generate_jobs(self, _, server_count):

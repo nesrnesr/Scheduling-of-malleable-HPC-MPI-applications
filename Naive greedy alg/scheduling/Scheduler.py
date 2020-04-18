@@ -1,8 +1,8 @@
 import logging
-from dataclasses import dataclass
+from dataclasses import astuple, dataclass
 from math import ceil
 from operator import attrgetter, methodcaller
-from random import sample
+from random import sample, uniform
 from statistics import mean, pstdev
 
 from .Job import Job
@@ -11,7 +11,6 @@ from .Server import Server
 
 @dataclass
 class SchedulerConfig:
-    server_count: int = 10
     server_threshold: float = 0.7
     ratio_almost_finished_jobs: float = 0.8
     time_remaining_for_power_off: int = 370
@@ -25,12 +24,32 @@ class SchedulerConfig:
     alpha_lower: float = 0.65
     alpha_mid: float = 0.75
 
-    stretch_time_weight: float = 1
-    energy_weight: float = 1
+    @classmethod
+    def random(cls):
+        c = SchedulerConfig()
+        c.server_threshold = uniform(0.05, 0.2)
+        c.ratio_almost_finished_jobs = uniform(0.5, 0.91)
+        c.time_remaining_for_power_off = uniform(370, 600)
+        c.shut_down_time = uniform(
+            c.time_remaining_for_power_off, c.time_remaining_for_power_off * 2
+        )
+        c.estimated_improv_threshold = uniform(0.5, 0.91)
+        c.alpha_min_server_lower_range = uniform(0.01, 0.4)
+        c.alpha_min_server_mid_range = uniform(
+            c.alpha_min_server_lower_range, c.alpha_min_server_lower_range * 2
+        )
+        c.alpha_min_server_upper_range = uniform(c.alpha_min_server_mid_range, 1)
+        c.alpha_lower = uniform(0.5, 0.7)
+        c.alpha_mid = uniform(c.alpha_lower, 0.9)
+        return c
 
     def to_dict(self):
         dict_obj = self.__dict__
         return dict_obj
+
+    def to_list(self):
+        return list(self.to_dict().values())
+
 
 @dataclass
 class SchedulerStats:
@@ -54,8 +73,8 @@ class SchedulerStats:
 
 
 class Scheduler(object):
-    def __init__(self, conf):
-        self.servers = [Server(i) for i in range(conf.server_count)]
+    def __init__(self, server_count, conf):
+        self.servers = [Server(i) for i in range(server_count)]
         self.conf = conf
         self.req_queue = []
         self.req_by_id = {}
@@ -177,15 +196,7 @@ class Scheduler(object):
 
     #############################################
 
-    def summary(self):
-        print("Number of servers: {}".format(len(self.servers)))
-        print("Number of jobs scheduled: {}".format(len(self.jobs)))
-        print("Number of reconfigurations: {}".format(self._num_reconfig_job()))
-        print("Number of power offs: {}".format(self._num_power_off()))
-        print("Total work time: {}".format(self._work_duration()))
-        print("Cost function value: {}".format(self._cost_function()))
-
-    def stats(self):
+    def stats(self, stretch_time_weight, energy_weight):
         stretch_times = self._stretch_times()
         start_time, end_time = self._work_span()
         return SchedulerStats(
@@ -200,7 +211,7 @@ class Scheduler(object):
             mean_stretch_time=mean(stretch_times),
             stdev_stretch_time=pstdev(stretch_times),
             average_power_norm=self._normalized_average_power(),
-            cost=self._cost_function(stretch_times),
+            cost=self._cost_function(stretch_times, stretch_time_weight, energy_weight),
         )
 
     def _work_span(self):
@@ -255,8 +266,8 @@ class Scheduler(object):
     def _num_power_off(self):
         return len(self.complete_jobs.get(Job.POWER_OFF_ID, []))
 
-    def _cost_function(self, stretch_times):
+    def _cost_function(self, stretch_times, stretch_time_weight, energy_weight):
         return (
-            self.conf.stretch_time_weight * mean(stretch_times)
-            + self.conf.energy_weight * self._normalized_average_power()
+            stretch_time_weight * mean(stretch_times)
+            + energy_weight * self._normalized_average_power()
         )
