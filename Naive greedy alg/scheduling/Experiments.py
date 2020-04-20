@@ -29,6 +29,7 @@ class Experiments:
             scheduler.update_schedule(time)
             time += 10
 
+        scheduler.stop(time)
         return scheduler.stats(stretch_time_weight=1, energy_weight=1)
 
     # Reconfiguration example

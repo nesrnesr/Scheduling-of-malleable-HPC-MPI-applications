@@ -2,7 +2,7 @@ from math import floor
 
 
 class Job:
-    POWER_OFF_ID = None
+    POWER_OFF_ID = "POWER_OFF"
 
     def __init__(
         self, req_id, alpha, data, mass, max_server_count, servers, start_time
@@ -85,10 +85,10 @@ class Job:
         return time >= self.end_time
 
     def is_reconfigurable(self):
-        return self.mass != 0
+        return self.mass != 0 and len(self.servers) != self.max_server_count
 
     def is_reconfiguration(self):
-        return not self.is_reconfigurable() and self.id is not Job.POWER_OFF_ID
+        return self.mass == 0 and self.id is not Job.POWER_OFF_ID
 
     def is_power_off(self):
-        return not self.is_reconfigurable() and self.id is Job.POWER_OFF_ID
+        return self.mass == 0 and self.id is Job.POWER_OFF_ID

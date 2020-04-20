@@ -82,17 +82,79 @@ class Scheduler(object):
         self.logger = logging.getLogger(__name__)
 
     def is_working(self):
-        return self.req_queue or self.active_jobs
+        return self.req_queue or (
+            self.active_jobs and not all(job.is_power_off() for job in self.active_jobs)
+        )
+
+    def stop(self, time):
+        for job in self.active_jobs:
+            job.end_time = time
+        self._remove_job(*self.active_jobs)
 
     def schedule(self, job_request):
         self.req_queue.append(job_request)
         self.req_queue.sort(key=attrgetter("sub_time"), reverse=True)
         self.req_by_id[job_request.id] = job_request
 
+    # Add shrink logic
+    # Start shrinking if len(req_queue) > conf_value_1
+    # compute minimum number of servers required to start jobs
+    # freeable_srv_count = max_freeable_srvs * conf_value_3
+    # filter + order active jobs by data if data > conf_value_2
+    # compute maximum freeable servers
+
+    # try reduce to free enough servers (minimum required)
     def update_schedule(self, time):
-        complete_jobs = [job for job in self.active_jobs if job.is_complete(time)]
-        while complete_jobs:
-            job = complete_jobs.pop()
+        self._remove_job(*[job for job in self.active_jobs if job.is_complete(time)])
+
+        av_servers = [server for server in self.servers if not server.is_busy(time)]
+        self.logger.debug(f"{time}: av_servers: {av_servers}")
+        while self.req_queue and av_servers:
+            job_req = self.req_queue[-1]
+            job_servers = self._allocate_servers(av_servers, job_req)
+            if not job_servers:
+                break
+            self.logger.debug(f"{time} req {job_req}")
+            job = Job.from_request(job_req, job_servers, start_time=time)
+            self._start_job(job)
+            self.req_queue.pop()
+            av_servers = [server for server in av_servers if server not in job_servers]
+
+        # Add config value to only consider jobs with data < conf_value
+        jobs_by_mass = sorted(
+            self.active_jobs, key=methodcaller("remaining_mass", time)
+        )
+        while jobs_by_mass and av_servers:
+            job = jobs_by_mass[0]
+            if self._is_job_reconfigurable(job, av_servers, time):
+                av_servers = self._reconfigure_job(job, av_servers, time)
+            jobs_by_mass.pop(0)
+
+        for server in list(av_servers):
+            if not self._shutdown_server(av_servers):
+                break
+                # if (
+                #     random()
+                #     < ((len(av_servers) / len(self.servers)) ** self.conf.shutdown_weight)
+                #     * self.conf.shutdown_prob
+                # ):
+            power_off = Job.make_power_off(
+                [server], start_time=time, duration=self.conf.shutdown_time
+            )
+            self._start_job(power_off)
+            av_servers.remove(server)
+
+    def _start_job(self, *jobs):
+        for job in jobs:
+            self.active_jobs.append(job)
+            self.logger.debug(
+                f"new {job} on {len(job.servers)} servers, active -> {self.active_jobs}"
+            )
+            for server in job.servers:
+                server.add_job(job)
+
+    def _remove_job(self, *jobs):
+        for job in jobs:
             self.active_jobs.remove(job)
             self.logger.debug(f"remove {job}, active: {self.active_jobs}")
             for server in job.servers:
@@ -102,50 +164,6 @@ class Scheduler(object):
             completed_jobs.append(job)
             self.complete_jobs[job.id] = completed_jobs
 
-        av_servers = [server for server in self.servers if not server.is_busy(time)]
-        while self.req_queue and av_servers:
-            job_req = self.req_queue[-1]
-            job_servers = self._allocate_servers(av_servers, job_req)
-            if not job_servers:
-                break
-            job = Job.from_request(job_req, job_servers, time)
-            self.logger.debug(f"new {job}, {len(job_servers)}")
-            self._start_job(job)
-            self.req_queue.pop()
-            av_servers = [server for server in av_servers if server not in job_servers]
-
-        jobs_by_mass = sorted(
-            self.active_jobs, key=methodcaller("remaining_mass", time)
-        )
-        while jobs_by_mass and self._enough_available_servers(av_servers):
-            job = jobs_by_mass[0]
-            if self._is_job_reconfigurable(job, av_servers, time):
-                av_servers = self._reconfigure_job(job, av_servers, time)
-            jobs_by_mass.pop(0)
-
-        if (
-            self.active_jobs
-            and av_servers
-            and not self._enough_available_servers(av_servers)
-        ):
-            under_threshold = 0
-            for job in self.active_jobs:
-                if job.remaining_time(time) < self.conf.time_remaining_for_power_off:
-                    under_threshold += 1
-
-            ratio_finishing_jobs = under_threshold / len(self.active_jobs)
-            if ratio_finishing_jobs <= self.conf.ratio_almost_finished_jobs:
-                power_off = Job.make_power_off(
-                    av_servers, start_time=time, duration=self.conf.shut_down_time
-                )
-                self._start_job(power_off)
-
-    def _start_job(self, *jobs):
-        for job in jobs:
-            self.active_jobs.append(job)
-            for server in job.servers:
-                server.add_job(job)
-
     def _reconfigure_job(self, job, av_servers, time):
         job.interupt(time)
         extra_srv_count = min(job.max_server_count - job.server_count, len(av_servers))
@@ -153,8 +171,9 @@ class Scheduler(object):
         job_servers = job.servers + extra_srvs
         av_servers = [server for server in av_servers if server not in extra_srvs]
 
-        self.logger.debug(f"reconfigure {job} with {len(job_servers)} servers")
+        self.logger.debug(f"{time} reconfigure {job} with {len(job_servers)} servers")
         reconfig_job, job_rest = job.reconfigure(job_servers, time)
+        self._remove_job(job)
         self._start_job(reconfig_job, job_rest)
 
         return av_servers
@@ -164,16 +183,22 @@ class Scheduler(object):
             return False
 
         extra_srv_count = min(job.max_server_count - job.server_count, len(av_servers))
-        if extra_srv_count == 0:
-            return False
+        return extra_srv_count > 0
+        # return (
+        #     random()
+        #     < (
+        #         ((len(job.servers) + extra_srv_count) / job.max_server_count)
+        #         ** self.conf.reconfig_weight
+        #     )
+        #     * self.conf.reconfig_prob
+        # )
 
-        new_srv_count = job.server_count + extra_srv_count
-        reconfig_time = job.reconfiguration_time(new_srv_count)
-        mass_left = job.remaining_mass(time)
-        new_remaining_time = Job.exec_time(mass_left, new_srv_count, job.alpha)
-        return (reconfig_time + new_remaining_time) / job.remaining_time(
-            time
-        ) < self.conf.estimated_improv_threshold
+    def _shutdown_server(self, av_servers):
+        if not self.req_queue:
+            return True
+
+        required_servers = sum(req.min_num_servers for req in self.req_queue)
+        return len(av_servers) > required_servers
 
     def _allocate_servers(self, available_servers, job_req):
         limits = [
@@ -184,13 +209,10 @@ class Scheduler(object):
         alpha = next((limit for limit in limits if job_req.alpha < limit), 1)
         min_servers = ceil(alpha * len(self.servers))
         min_servers = min(min_servers, job_req.max_num_servers, len(available_servers))
-        self.logger.debug(f"Try allocating {job_req} with {min_servers} ")
+        # self.logger.debug(f"Try allocating {job_req} with {min_servers} ")
         if min_servers < job_req.min_num_servers:
             return []
         return sample(available_servers, k=min_servers)
-
-    def _enough_available_servers(self, servers):
-        return len(servers) / len(self.servers) > self.conf.server_threshold
 
     #############################################
 
