@@ -1,6 +1,6 @@
 from dataclasses import astuple, dataclass
 from pathlib import Path
-from random import random
+from random import uniform
 
 import matplotlib.pyplot as plt
 
@@ -24,9 +24,14 @@ class Visualizer:
         path = Path(filepath)
         path.parent.mkdir(0o755, parents=True, exist_ok=True)
 
+        plt.figure(filepath)
+        plt.subplot()
+
         power_off_color = Color(0, 0, 0)
         for jobs in stats.complete_jobs.values():
-            job_color = Color(random(), random(), random())
+            job_color = Color(
+                uniform(0.25, 0.9), uniform(0.25, 0.9), uniform(0.25, 0.9)
+            )
             for job in jobs:
                 job_color.a = 0.5 if job.is_reconfiguration() else 1
                 if job.is_power_off():
@@ -40,6 +45,7 @@ class Visualizer:
         plt.xlabel("time")
         plt.axis("auto")
         plt.savefig(filepath, dpi=200)
+        plt.close(filepath)
 
     def _draw_rectangle(self, tl, size, color):
         rectangle = plt.Rectangle((tl.x, tl.y), size.x, size.y, fc=astuple(color))
