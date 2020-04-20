@@ -27,6 +27,9 @@ class Particle:
         )
         position = self.velocity + position
 
+        print(
+            f"position: {len(position)} {self.config} {self.config.to_list()}  {position}"
+        )
         self.config = SchedulerConfig(*position)
         self.config = self._check_bounds(self.config)
 
@@ -36,17 +39,11 @@ class Particle:
             self.best_config = self.config
 
     def _check_bounds(self, config):
-        config.server_threshold = min(max(config.server_threshold, 0.05), 0.9)
-        config.ratio_almost_finished_jobs = min(
-            max(config.ratio_almost_finished_jobs, 0.05), 0.91
-        )
-        config.time_remaining_for_power_off = max(
-            config.time_remaining_for_power_off, 360
-        )
-        config.shut_down_time = max(config.shut_down_time, 360)
-        config.estimated_improv_threshold = min(
-            max(config.estimated_improv_threshold, 0.05), 0.91
-        )
+        config.shutdown_prob = min(max(config.shutdown_prob, 0.05), 0.91)
+        config.shutdown_weight = min(max(config.shutdown_weight, 0.05), 0.91)
+        config.reconfig_prob = min(max(config.reconfig_prob, 0.05), 0.91)
+        config.reconfig_weight = min(max(config.reconfig_weight, 0.05), 0.91)
+        config.shutdown_time = max(config.shutdown_time, 360)
 
         # config.alpha_min_server_lower_range = min(max(config.alpha_min_server_lower_range, 0.01), 0.9)
         # config.server_threshold = min(max(config.server_threshold, 0.05), 0.9)

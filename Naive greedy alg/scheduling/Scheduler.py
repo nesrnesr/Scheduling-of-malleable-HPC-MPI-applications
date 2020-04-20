@@ -2,7 +2,7 @@ import logging
 from dataclasses import astuple, dataclass
 from math import ceil
 from operator import attrgetter, methodcaller
-from random import sample, uniform
+from random import random, sample, uniform
 from statistics import mean, pstdev
 
 from .Job import Job
@@ -11,11 +11,11 @@ from .Server import Server
 
 @dataclass
 class SchedulerConfig:
-    server_threshold: float = 0.7
-    ratio_almost_finished_jobs: float = 0.8
-    time_remaining_for_power_off: int = 370
-    shut_down_time: int = 800
-    estimated_improv_threshold: float = 0.9
+    shutdown_prob: float = 0.01
+    shutdown_weight: float = 0.1
+    reconfig_prob: int = 0.1
+    reconfig_weight: float = 0.5
+    shutdown_time: int = 800
 
     alpha_min_server_lower_range: float = 0.4
     alpha_min_server_mid_range: float = 0.6
@@ -27,13 +27,11 @@ class SchedulerConfig:
     @classmethod
     def random(cls):
         c = SchedulerConfig()
-        c.server_threshold = uniform(0.05, 0.2)
-        c.ratio_almost_finished_jobs = uniform(0.5, 0.91)
-        c.time_remaining_for_power_off = uniform(370, 600)
-        c.shut_down_time = uniform(
-            c.time_remaining_for_power_off, c.time_remaining_for_power_off * 2
-        )
-        c.estimated_improv_threshold = uniform(0.5, 0.91)
+        c.shutdown_prob = uniform(0.001, 1.0)
+        c.shutdown_weight = uniform(0.01, 1.0)
+        c.reconfig_prob = uniform(0.001, 1.0)
+        c.reconfig_weight = uniform(0.01, 1.0)
+        c.shutdown_time = uniform(370, 1200)
         c.alpha_min_server_lower_range = uniform(0.01, 0.4)
         c.alpha_min_server_mid_range = uniform(
             c.alpha_min_server_lower_range, c.alpha_min_server_lower_range * 2
@@ -48,7 +46,7 @@ class SchedulerConfig:
         return dict_obj
 
     def to_list(self):
-        return list(self.to_dict().values())
+        return list(astuple(self))
 
 
 @dataclass

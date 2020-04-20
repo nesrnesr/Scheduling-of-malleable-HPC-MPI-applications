@@ -66,16 +66,18 @@ class Experiments:
     #     return [a, b, c]
 
     def _generate_jobs(self, job_count, server_count):
-        jobs = [self._generate_job(server_count, i) for i in range(job_count)]
+        jobs = [
+            self._generate_job(job_count, server_count, i) for i in range(job_count)
+        ]
         jobs = sorted(jobs, key=lambda k: k.sub_time)
         return jobs
 
-    def _generate_job(self, server_count, num):
-        sub_time = uniform(0, 3000)
+    def _generate_job(self, job_count, server_count, num):
+        sub_time = uniform(0, job_count * 300)
         alpha = uniform(0.5, 1)
         data = uniform(10, 100)
         mass = uniform(10, 5000)
-        min_num_servers = ceil(alpha * (server_count - 1))
+        min_num_servers = ceil((alpha / 3) * (server_count - 1))
         max_num_servers = randrange(min_num_servers, server_count)
         return JobRequest(
             "job" + str(num),
