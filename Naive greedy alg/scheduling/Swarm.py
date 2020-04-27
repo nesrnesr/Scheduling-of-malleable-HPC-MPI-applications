@@ -1,6 +1,6 @@
 from math import inf
 from random import seed
-from statistics import mean
+from statistics import mean, stdev
 
 import pandas as pd
 
@@ -8,6 +8,7 @@ from .Experiments import Experiments
 from .Particle import Particle
 from .Scheduler import SchedulerConfig
 from .Visualizer import Visualizer
+from .EpochStats import EpochStats
 
 
 class Swarm(object):
@@ -23,14 +24,19 @@ class Swarm(object):
         self.best_cost = inf
         self.experiment = Experiments()
 
-    def run_epochs(self, num_epochs, draw_stats=False):
+    def run_epochs(self, num_epochs, draw_stats=False, draw_graph=False):
+        epochs_stats = []
         for i in range(num_epochs):
             print("epoch: ", i)
-            self._run_epoch(i, draw_stats)
-        return self.best_cost
+            epochs_stats.append(self._run_epoch(i, draw_stats))
+        if draw_graph:
+            self._draw_graph(
+                num_epochs, pd.DataFrame([stat.to_dict() for stat in epochs_stats])
+            )
 
     def _run_epoch(self, num_epoch, draw_stats):
         self.best_cost = inf
+        self.epoch_costs = []
         for i, particle in enumerate(self.population):
             print("Particle: ", i)
             df_configs = particle.config.to_dict()
@@ -41,6 +47,7 @@ class Swarm(object):
             if draw_stats:
                 self._draw_stats(num_epoch, i, stats, particle.config)
             cost = mean([stat.cost for stat in stats])
+            self.epoch_costs.append(cost)
             if cost < self.best_cost:
                 self.best_cost = cost
                 self.best_particle = particle
@@ -51,6 +58,13 @@ class Swarm(object):
 
         print(self.best_cost)
         self.configs()
+        return EpochStats(
+            num_epoch,
+            min(self.epoch_costs),
+            max(self.epoch_costs),
+            mean(self.epoch_costs),
+            stdev(self.epoch_costs),
+        )
 
     def _draw_stats(self, num_epoch, particle_idx, stats, config):
         visualizer = Visualizer()
@@ -65,6 +79,12 @@ class Swarm(object):
         print("Experiment stats:\n", df_stat)
         print("Mean cost: ", df_stat["cost"].mean())
         print("Tuning configs:\n", config)
+
+    def _draw_graph(self, num_epoch, stats):
+        visualizer = Visualizer()
+        visualizer.draw_graph(
+            stats, f"./results/seed_{self.seed}/num_epoch{num_epoch}/graph.png",
+        )
 
     def configs(self):
         df_configs = pd.DataFrame([p.config.to_dict() for p in self.population])
