@@ -3,7 +3,7 @@ from dataclasses import astuple, dataclass
 from math import ceil
 from operator import attrgetter, methodcaller
 from random import random, sample, uniform
-from statistics import mean, pstdev
+from statistics import mean, stdev
 
 from .Job import Job
 from .Server import Server
@@ -15,8 +15,9 @@ class SchedulerConfig:
     shutdown_weight: float = 0.1
     reconfig_prob: int = 0.1
     reconfig_weight: float = 0.5
-    shutdown_time: int = 800
-
+    shutdown_time_1: int = 800
+    shutdown_time_2: int = 1000
+    shutdown_time_prob: float = 0.1
     alpha_min_server_lower_range: float = 0.4
     alpha_min_server_mid_range: float = 0.6
     alpha_min_server_upper_range: float = 1
@@ -31,7 +32,9 @@ class SchedulerConfig:
         c.shutdown_weight = uniform(0.01, 1.0)
         c.reconfig_prob = uniform(0.001, 1.0)
         c.reconfig_weight = uniform(0.01, 1.0)
-        c.shutdown_time = uniform(370, 1200)
+        c.shutdown_time_1 = uniform(370, 1200)
+        c.shutdown_time_2 = uniform(370, 4000)
+        c.shutdown_time_prob = uniform(0.0001, 1.0)
         c.alpha_min_server_lower_range = uniform(0.01, 0.4)
         c.alpha_min_server_mid_range = uniform(
             c.alpha_min_server_lower_range, c.alpha_min_server_lower_range * 2
@@ -133,16 +136,20 @@ class Scheduler(object):
         for server in list(av_servers):
             if not self._shutdown_server(av_servers):
                 break
-                # if (
-                #     random()
-                #     < ((len(av_servers) / len(self.servers)) ** self.conf.shutdown_weight)
-                #     * self.conf.shutdown_prob
-                # ):
-            power_off = Job.make_power_off(
-                [server], start_time=time, duration=self.conf.shutdown_time
-            )
-            self._start_job(power_off)
-            av_servers.remove(server)
+            if (
+                0.5
+                < ((len(av_servers) / len(self.servers)) ** self.conf.shutdown_weight)
+                * self.conf.shutdown_prob
+            ):
+                if random() < self.conf.shutdown_time_prob:
+                    shutdown_duration = self.conf.shutdown_time_1
+                else:
+                    shutdown_duration = self.conf.shutdown_time_2
+                power_off = Job.make_power_off(
+                    [server], start_time=time, duration=shutdown_duration
+                )
+                self._start_job(power_off)
+                av_servers.remove(server)
 
     def _start_job(self, *jobs):
         for job in jobs:
@@ -183,15 +190,15 @@ class Scheduler(object):
             return False
 
         extra_srv_count = min(job.max_server_count - job.server_count, len(av_servers))
-        return extra_srv_count > 0
-        # return (
-        #     random()
-        #     < (
-        #         ((len(job.servers) + extra_srv_count) / job.max_server_count)
-        #         ** self.conf.reconfig_weight
-        #     )
-        #     * self.conf.reconfig_prob
-        # )
+        # return extra_srv_count > 0
+        return (
+            0.5
+            < (
+                ((len(job.servers) + extra_srv_count) / job.max_server_count)
+                ** self.conf.reconfig_weight
+            )
+            * self.conf.reconfig_prob
+        )
 
     def _shutdown_server(self, av_servers):
         if not self.req_queue:
@@ -229,7 +236,7 @@ class Scheduler(object):
             min_stretch_time=min(stretch_times),
             max_stretch_time=max(stretch_times),
             mean_stretch_time=mean(stretch_times),
-            stdev_stretch_time=pstdev(stretch_times),
+            stdev_stretch_time=stdev(stretch_times),
             average_power_norm=self._normalized_average_power(),
             cost=self._cost_function(stretch_times, stretch_time_weight, energy_weight),
         )
@@ -288,6 +295,10 @@ class Scheduler(object):
 
     def _cost_function(self, stretch_times, stretch_time_weight, energy_weight):
         return (
-            stretch_time_weight * mean(stretch_times)
-            + energy_weight * self._normalized_average_power()
+            mean(stretch_times) ** stretch_time_weight
+            * self._normalized_average_power() ** energy_weight
         )
+        # return (
+        #     stretch_time_weight * mean(stretch_times)
+        #     + energy_weight * self._normalized_average_power()
+        # )
