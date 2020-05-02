@@ -33,6 +33,12 @@ class Swarm(object):
             self._draw_graph(
                 num_epochs, pd.DataFrame([stat.to_dict() for stat in epochs_stats])
             )
+        #   save final best config
+        df_best_config = pd.DataFrame([self.best_particle.config.to_dict()])
+        print(df_best_config)
+        df_best_config.to_csv("best_config.csv")
+        df_stat = pd.DataFrame([stat.to_dict() for stat in epochs_stats])
+        df_stat.to_csv("stats.csv")
 
     def _run_epoch(self, num_epoch, draw_stats):
         self.best_cost = inf
@@ -42,7 +48,10 @@ class Swarm(object):
             df_configs = particle.config.to_dict()
             print(df_configs)
             stats = self.experiment.run_expts(
-                particle.config, num_srvs=self.num_srvs, num_expts=self.num_exp
+                particle.config,
+                num_srvs=self.num_srvs,
+                num_expts=self.num_exp,
+                seed_num=num_epoch,
             )
             if draw_stats:
                 self._draw_stats(num_epoch, i, stats, particle.config)
