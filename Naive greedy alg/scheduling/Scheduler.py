@@ -11,19 +11,14 @@ from .Server import Server
 
 @dataclass
 class SchedulerConfig:
-    shutdown_prob: float = 0.01
-    shutdown_weight: float = 0.1
-    reconfig_prob: int = 0.1
-    reconfig_weight: float = 0.5
-    shutdown_time_1: int = 800
-    shutdown_time_2: int = 1000
-    shutdown_time_prob: float = 0.1
-    alpha_min_server_lower_range: float = 0.4
-    alpha_min_server_mid_range: float = 0.6
-    alpha_min_server_upper_range: float = 1
-
-    alpha_lower: float = 0.65
-    alpha_mid: float = 0.75
+    reconfig_prob: float = 0.4
+    reconfig_weight: float = 0.4
+    alpha_weight: float = 0.7
+    shutdown_prob: float = 0.6
+    shutdown_weight: float = 0.5
+    shutdown_time_1: float = 900
+    shutdown_time_2: float = 1400
+    shutdown_time_prob: float = 0.7
 
     @classmethod
     def random(cls):
@@ -35,13 +30,7 @@ class SchedulerConfig:
         c.shutdown_time_1 = uniform(370, 1200)
         c.shutdown_time_2 = uniform(370, 4000)
         c.shutdown_time_prob = uniform(0.0001, 1.0)
-        c.alpha_min_server_lower_range = uniform(0.01, 0.4)
-        c.alpha_min_server_mid_range = uniform(
-            c.alpha_min_server_lower_range, c.alpha_min_server_lower_range * 2
-        )
-        c.alpha_min_server_upper_range = uniform(c.alpha_min_server_mid_range, 1)
-        c.alpha_lower = uniform(0.5, 0.7)
-        c.alpha_mid = uniform(c.alpha_lower, 0.9)
+        c.alpha_weight = uniform(0.001, 1.0)
         return c
 
     def to_dict(self):
@@ -74,14 +63,23 @@ class SchedulerStats:
 
 
 class Scheduler(object):
-    def __init__(self, server_count, conf):
+    def __init__(
+        self,
+        server_count,
+        conf,
+        reconfig_enable=True,
+        power_off_enable=True,
+        param_enable=True,
+    ):
         self.servers = [Server(i) for i in range(server_count)]
         self.conf = conf
+        self.reconfig_enable = reconfig_enable
+        self.power_off_enable = power_off_enable
+        self.param_enable = param_enable
         self.req_queue = []
         self.req_by_id = {}
         self.active_jobs = []
         self.complete_jobs = {}
-
         self.logger = logging.getLogger(__name__)
 
     def is_working(self):
@@ -99,17 +97,10 @@ class Scheduler(object):
         self.req_queue.sort(key=attrgetter("sub_time"), reverse=True)
         self.req_by_id[job_request.id] = job_request
 
-    # Add shrink logic
-    # Start shrinking if len(req_queue) > conf_value_1
-    # compute minimum number of servers required to start jobs
-    # freeable_srv_count = max_freeable_srvs * conf_value_3
-    # filter + order active jobs by data if data > conf_value_2
-    # compute maximum freeable servers
-
-    # try reduce to free enough servers (minimum required)
     def update_schedule(self, time):
         self._remove_job(*[job for job in self.active_jobs if job.is_complete(time)])
 
+        # Schedule jobs in the queue
         av_servers = [server for server in self.servers if not server.is_busy(time)]
         self.logger.debug(f"{time}: av_servers: {av_servers}")
         while self.req_queue and av_servers:
@@ -123,33 +114,47 @@ class Scheduler(object):
             self.req_queue.pop()
             av_servers = [server for server in av_servers if server not in job_servers]
 
-        # Add config value to only consider jobs with data < conf_value
-        jobs_by_mass = sorted(
-            self.active_jobs, key=methodcaller("remaining_mass", time)
-        )
-        while jobs_by_mass and av_servers:
-            job = jobs_by_mass[0]
-            if self._is_job_reconfigurable(job, av_servers, time):
-                av_servers = self._reconfigure_job(job, av_servers, time)
-            jobs_by_mass.pop(0)
+        # Reconfiguration
+        if self.reconfig_enable:
+            jobs_by_mass = sorted(
+                self.active_jobs, key=methodcaller("remaining_mass", time)
+            )
+            while jobs_by_mass and av_servers:
+                job = jobs_by_mass[0]
+                if self._is_job_reconfigurable(job, av_servers, time):
+                    av_servers = self._reconfigure_job(job, av_servers, time)
+                jobs_by_mass.pop(0)
 
-        for server in list(av_servers):
-            if not self._shutdown_server(av_servers):
-                break
-            if (
-                0.5
-                < ((len(av_servers) / len(self.servers)) ** self.conf.shutdown_weight)
-                * self.conf.shutdown_prob
-            ):
-                if random() < self.conf.shutdown_time_prob:
-                    shutdown_duration = self.conf.shutdown_time_1
+        # Turn off servers
+        if self.power_off_enable:
+            for server in list(av_servers):
+                if self.param_enable:
+                    if not self._shutdown_server(av_servers):
+                        break
+                    if (
+                        0.5
+                        < (
+                            (len(av_servers) / len(self.servers))
+                            ** self.conf.shutdown_weight
+                        )
+                        * self.conf.shutdown_prob
+                    ):
+                        if random() < self.conf.shutdown_time_prob:
+                            shutdown_duration = self.conf.shutdown_time_1
+                        else:
+                            shutdown_duration = self.conf.shutdown_time_2
+                        power_off = Job.make_power_off(
+                            [server], start_time=time, duration=shutdown_duration
+                        )
+                        self._start_job(power_off)
+                        av_servers.remove(server)
                 else:
-                    shutdown_duration = self.conf.shutdown_time_2
-                power_off = Job.make_power_off(
-                    [server], start_time=time, duration=shutdown_duration
-                )
-                self._start_job(power_off)
-                av_servers.remove(server)
+                    shutdown_duration = self.conf.shutdown_time_1
+                    power_off = Job.make_power_off(
+                        [server], start_time=time, duration=shutdown_duration
+                    )
+                    self._start_job(power_off)
+                    av_servers.remove(server)
 
     def _start_job(self, *jobs):
         for job in jobs:
@@ -190,15 +195,18 @@ class Scheduler(object):
             return False
 
         extra_srv_count = min(job.max_server_count - job.server_count, len(av_servers))
-        # return extra_srv_count > 0
-        return (
-            0.5
-            < (
-                ((len(job.servers) + extra_srv_count) / job.max_server_count)
-                ** self.conf.reconfig_weight
+        if self.param_enable:
+            return (
+                0.5
+                < (
+                    ((len(job.servers) + extra_srv_count) / job.max_server_count)
+                    ** self.conf.reconfig_weight
+                    * job.alpha ** self.conf.alpha_weight
+                )
+                * self.conf.reconfig_prob
             )
-            * self.conf.reconfig_prob
-        )
+        else:
+            return extra_srv_count > 0
 
     def _shutdown_server(self, av_servers):
         if not self.req_queue:
@@ -208,14 +216,7 @@ class Scheduler(object):
         return len(av_servers) > required_servers
 
     def _allocate_servers(self, available_servers, job_req):
-        limits = [
-            self.conf.alpha_min_server_lower_range,
-            self.conf.alpha_min_server_mid_range,
-            self.conf.alpha_min_server_upper_range,
-        ]
-        alpha = next((limit for limit in limits if job_req.alpha < limit), 1)
-        min_servers = ceil(alpha * len(self.servers))
-        min_servers = min(min_servers, job_req.max_num_servers, len(available_servers))
+        min_servers = min(job_req.max_num_servers, len(available_servers))
         # self.logger.debug(f"Try allocating {job_req} with {min_servers} ")
         if min_servers < job_req.min_num_servers:
             return []
@@ -298,7 +299,3 @@ class Scheduler(object):
             mean(stretch_times) ** stretch_time_weight
             * self._normalized_average_power() ** energy_weight
         )
-        # return (
-        #     stretch_time_weight * mean(stretch_times)
-        #     + energy_weight * self._normalized_average_power()
-        # )
