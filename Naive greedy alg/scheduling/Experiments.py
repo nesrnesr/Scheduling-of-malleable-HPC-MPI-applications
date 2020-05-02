@@ -1,5 +1,5 @@
 from math import ceil
-from random import randrange, uniform
+from random import randrange, uniform, seed
 import scipy.stats
 import numpy
 
@@ -8,21 +8,32 @@ from .Scheduler import Scheduler
 
 
 class Experiments:
-    def run_expts(self, config, num_srvs, num_expts):
+    def __init__(
+        self, reconfig_enable=True, power_off_enable=True, param_enable=True,
+    ):
+        self.reconfig_enable = reconfig_enable
+        self.power_off_enable = power_off_enable
+        self.param_enable = param_enable
+
+    def run_expts(self, config, num_srvs, num_expts, seed_num):
         stats = []
         for i in range(num_expts):
-            expt_stats = self._run_expt(num_srvs, config)
+            expt_stats = self._run_expt(num_srvs, config, seed_num + i)
             stats.append(expt_stats)
         return stats
 
-    def _run_expt(self, num_srvs, config):
-        scheduler = Scheduler(num_srvs, config)
-        jobs = self._generate_jobs(30, num_srvs)
+    def _run_expt(self, num_srvs, config, seed_num):
+        scheduler = Scheduler(
+            num_srvs,
+            config,
+            self.reconfig_enable,
+            self.power_off_enable,
+            self.param_enable,
+        )
+        jobs = self._generate_jobs(40, num_srvs, seed_num)
 
         time = 0
         while jobs or scheduler.is_working():
-            # print(f"time: {time}, {jobs}")
-            # sys.stdin.read(1)
             for job in list(jobs):
                 if time < job.sub_time:
                     break
@@ -34,20 +45,22 @@ class Experiments:
         scheduler.stop(time)
         return scheduler.stats(stretch_time_weight=1, energy_weight=1)
 
-    def _generate_jobs(self, job_count, server_count):
+    def _generate_jobs(self, job_count, server_count, seed_num):
         jobs = []
         previous_sub_time = 0
         for i in range(job_count):
-            job = self._generate_job(previous_sub_time, server_count, i)
+            job = self._generate_job(previous_sub_time, server_count, i, seed_num)
             jobs.append(job)
             previous_sub_time = job.sub_time
         # jobs = sorted(jobs, key=lambda k: k.sub_time)
         return jobs
 
-    def _generate_job(self, timestampLastEvent, server_count, num):
+    def _generate_job(self, timestampLastEvent, server_count, num, seed_num):
+        seed(seed_num + num)
+        numpy.random.seed(seed=seed_num + num)
         sub_time, mass = self._get_next_task(timestampLastEvent, 500, 1700, 3.8)
         alpha = uniform(0.5, 1)
-        data = uniform(10, 10000)
+        data = uniform(10, 500)
         min_num_servers = ceil((alpha / 3) * (server_count - 1))
         max_num_servers = randrange(min_num_servers, server_count)
         return JobRequest(
@@ -70,61 +83,3 @@ class Experiments:
         newTimeStamp = timestampLastEvent + arrival
         makespan = self._get_makespan(mass, disparity)
         return (newTimeStamp, makespan)
-
-        # Reconfiguration example
-        # def _generate_jobs(self, _, server_count):
-        #     a = JobRequest(
-        #         id="A",
-        #         sub_time=100,
-        #         alpha=1,
-        #         data=10,
-        #         mass=10,
-        #         min_num_servers=2,
-        #         max_num_servers=server_count,
-        #     )
-        #
-        #     b = JobRequest(
-        #         id="B",
-        #         sub_time=101,
-        #         alpha=1,
-        #         data=10,
-        #         mass=100,
-        #         min_num_servers=2,
-        #         max_num_servers=3,
-        #     )
-        #
-        #     c = JobRequest(
-        #         id="C",
-        #         sub_time=102,
-        #         alpha=1,
-        #         data=10,
-        #         mass=300,
-        #         min_num_servers=1,
-        #         max_num_servers=3,
-        #     )
-        #
-        #     return [a, b, c]
-
-        # def _generate_jobs(self, job_count, server_count):
-        #     jobs = [
-        #         self._generate_job(job_count, server_count, i) for i in range(job_count)
-        #     ]
-        #     jobs = sorted(jobs, key=lambda k: k.sub_time)
-        #     return jobs
-
-        # def _generate_job(self, job_count, server_count, num):
-        #     sub_time = uniform(0, job_count * 300)
-        #     alpha = uniform(0.5, 1)
-        #     data = uniform(10, 100)
-        #     mass = uniform(10, 5000)
-        #     min_num_servers = ceil((alpha / 3) * (server_count - 1))
-        #     max_num_servers = randrange(min_num_servers, server_count)
-        #     return JobRequest(
-        #         "job" + str(num),
-        #         sub_time,
-        #         alpha,
-        #         data,
-        #         mass,
-        #         min_num_servers,
-        #         max_num_servers,
-        #     )
