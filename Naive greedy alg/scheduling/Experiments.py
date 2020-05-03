@@ -30,7 +30,7 @@ class Experiments:
             self.power_off_enable,
             self.param_enable,
         )
-        jobs = self._generate_jobs(40, num_srvs, seed_num)
+        jobs = self._generate_jobs(50, num_srvs, seed_num)
 
         time = 0
         while jobs or scheduler.is_working():
