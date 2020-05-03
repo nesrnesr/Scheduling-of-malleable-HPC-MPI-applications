@@ -11,14 +11,14 @@ from .Server import Server
 
 @dataclass
 class SchedulerConfig:
-    reconfig_prob: float = 0.4
-    reconfig_weight: float = 0.4
-    alpha_weight: float = 0.7
-    shutdown_prob: float = 0.6
-    shutdown_weight: float = 0.5
-    shutdown_time_1: float = 900
-    shutdown_time_2: float = 1400
-    shutdown_time_prob: float = 0.7
+    reconfig_prob: float = 0.331
+    reconfig_weight: float = 0.175
+    alpha_weight: float = 0.742
+    shutdown_prob: float = 0.760
+    shutdown_weight: float = 0.455
+    shutdown_time_1: float = 899
+    shutdown_time_2: float = 1406
+    shutdown_time_prob: float = 0.717
 
     @classmethod
     def random(cls):
@@ -195,7 +195,7 @@ class Scheduler(object):
             return False
 
         extra_srv_count = min(job.max_server_count - job.server_count, len(av_servers))
-        if self.param_enable:
+        if extra_srv_count > 0 and self.param_enable:
             return (
                 0.5
                 < (
