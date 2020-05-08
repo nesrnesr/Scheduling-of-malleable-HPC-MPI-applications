@@ -1,7 +1,8 @@
-from math import ceil
-from random import randrange, uniform, seed
-import scipy.stats
+from math import ceil, log, sqrt
+from random import randrange, seed, uniform
+
 import numpy
+import scipy.stats
 
 from .JobRequest import JobRequest
 from .Scheduler import Scheduler
@@ -73,13 +74,13 @@ class Experiments:
             max_num_servers,
         )
 
-    def _get_makespan(self, mass, disparity):
-        mu = numpy.log(mass / disparity)
-        sigma = numpy.sqrt(2 * (numpy.log(mass) - mu))
-        return scipy.stats.lognorm.rvs(sigma, scale=mass / disparity)
-
     def _get_next_task(self, timestampLastEvent, dynamism, mass, disparity):
         arrival = scipy.stats.pareto.rvs(4, loc=-1) * 3 * dynamism
         newTimeStamp = timestampLastEvent + arrival
         makespan = self._get_makespan(mass, disparity)
         return (newTimeStamp, makespan)
+
+    def _get_makespan(self, mass, disparity):
+        mu = log(mass / disparity)
+        sigma = sqrt(2 * (numpy.log(mass) - mu))
+        return scipy.stats.lognorm.rvs(sigma, scale=mass / disparity)
