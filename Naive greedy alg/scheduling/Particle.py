@@ -39,8 +39,8 @@ class Particle:
         config.shutdown_weight = self._reflect(config.shutdown_weight, 0, 1)
         config.reconfig_prob = self._reflect(config.reconfig_prob, 0, 1)
         config.reconfig_weight = self._reflect(config.reconfig_weight, 0, 1)
-        config.shutdown_time_1 = self._reflect(config.shutdown_time_1, 260, 100000)
-        config.shutdown_time_2 = self._reflect(config.shutdown_time_2, 260, 100000)
+        config.shutdown_time_short = self._reflect(config.shutdown_time_short, 260, 100000)
+        config.shutdown_time_long = self._reflect(config.shutdown_time_long, 260, 100000)
         config.shutdown_time_prob = self._reflect(config.shutdown_time_prob, 0, 1)
         config.alpha_weight = self._reflect(config.alpha_weight, 0, 1)
         return config

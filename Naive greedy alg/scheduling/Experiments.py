@@ -10,11 +10,11 @@ from .Scheduler import Scheduler
 
 class Experiments:
     def __init__(
-        self, reconfig_enable=True, power_off_enable=True, param_enable=True,
+        self, reconfig_enabled=True, power_off_enabled=True, param_enabled=True,
     ):
-        self.reconfig_enable = reconfig_enable
-        self.power_off_enable = power_off_enable
-        self.param_enable = param_enable
+        self.reconfig_enabled = reconfig_enabled
+        self.power_off_enabled = power_off_enabled
+        self.param_enabled = param_enabled
 
     def run_expts(self, config, num_srvs, num_expts, seed_num):
         stats = []
@@ -27,9 +27,9 @@ class Experiments:
         scheduler = Scheduler(
             num_srvs,
             config,
-            self.reconfig_enable,
-            self.power_off_enable,
-            self.param_enable,
+            self.reconfig_enabled,
+            self.power_off_enabled,
+            self.param_enabled,
         )
         jobs = self._generate_jobs(50, num_srvs, seed_num)
 

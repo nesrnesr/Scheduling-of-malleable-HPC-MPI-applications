@@ -1,6 +1,5 @@
 import logging
 from dataclasses import astuple, dataclass
-from math import ceil
 from operator import attrgetter, methodcaller
 from random import random, sample, uniform
 from statistics import mean, stdev
@@ -16,8 +15,8 @@ class SchedulerConfig:
     alpha_weight: float = 0.742
     shutdown_prob: float = 0.760
     shutdown_weight: float = 0.455
-    shutdown_time_1: float = 899
-    shutdown_time_2: float = 1406
+    shutdown_time_short: float = 899
+    shutdown_time_long: float = 1406
     shutdown_time_prob: float = 0.717
 
     @classmethod
@@ -27,8 +26,8 @@ class SchedulerConfig:
         c.shutdown_weight = uniform(0.01, 1.0)
         c.reconfig_prob = uniform(0.001, 1.0)
         c.reconfig_weight = uniform(0.01, 1.0)
-        c.shutdown_time_1 = uniform(370, 1200)
-        c.shutdown_time_2 = uniform(370, 4000)
+        c.shutdown_time_short = uniform(370, 1200)
+        c.shutdown_time_long = uniform(370, 4000)
         c.shutdown_time_prob = uniform(0.0001, 1.0)
         c.alpha_weight = uniform(0.001, 1.0)
         return c
@@ -67,15 +66,15 @@ class Scheduler(object):
         self,
         server_count,
         conf,
-        reconfig_enable=True,
-        power_off_enable=True,
-        param_enable=True,
+        reconfig_enabled=True,
+        power_off_enabled=True,
+        param_enabled=True,
     ):
         self.servers = [Server(i) for i in range(server_count)]
         self.conf = conf
-        self.reconfig_enable = reconfig_enable
-        self.power_off_enable = power_off_enable
-        self.param_enable = param_enable
+        self.reconfig_enabled = reconfig_enabled
+        self.power_off_enabled = power_off_enabled
+        self.param_enabled = param_enabled
         self.req_queue = []
         self.req_by_id = {}
         self.active_jobs = []
@@ -115,7 +114,7 @@ class Scheduler(object):
             av_servers = [server for server in av_servers if server not in job_servers]
 
         # Reconfiguration
-        if self.reconfig_enable:
+        if self.reconfig_enabled:
             jobs_by_mass = sorted(
                 self.active_jobs, key=methodcaller("remaining_mass", time)
             )
@@ -126,35 +125,38 @@ class Scheduler(object):
                 jobs_by_mass.pop(0)
 
         # Turn off servers
-        if self.power_off_enable:
+        if self.power_off_enabled:
             for server in list(av_servers):
-                if self.param_enable:
-                    if not self._shutdown_server(av_servers):
-                        break
-                    if (
-                        0.5
-                        < (
-                            (len(av_servers) / len(self.servers))
-                            ** self.conf.shutdown_weight
-                        )
-                        * self.conf.shutdown_prob
-                    ):
-                        if random() < self.conf.shutdown_time_prob:
-                            shutdown_duration = self.conf.shutdown_time_1
-                        else:
-                            shutdown_duration = self.conf.shutdown_time_2
-                        power_off = Job.make_power_off(
-                            [server], start_time=time, duration=shutdown_duration
-                        )
-                        self._start_job(power_off)
-                        av_servers.remove(server)
-                else:
-                    shutdown_duration = self.conf.shutdown_time_1
-                    power_off = Job.make_power_off(
-                        [server], start_time=time, duration=shutdown_duration
-                    )
-                    self._start_job(power_off)
-                    av_servers.remove(server)
+                if not self._shutdown_server(av_servers):
+                    break
+
+                shutdown, duration = self._allow_shutdown(av_servers)
+                if not shutdown:
+                    continue
+
+                power_off = Job.make_power_off(
+                    [server], start_time=time, duration=duration
+                )
+                self._start_job(power_off)
+                av_servers.remove(server)
+
+    def _allow_shutdown(self, av_servers):
+        if self.param_enabled:
+            if (
+                0.5
+                > ((len(av_servers) / len(self.servers)) ** self.conf.shutdown_weight)
+                * self.conf.shutdown_prob
+            ):
+                return False, 0
+
+            if random() < self.conf.shutdown_time_prob:
+                shutdown_duration = self.conf.shutdown_time_short
+            else:
+                shutdown_duration = self.conf.shutdown_time_long
+            return True, shutdown_duration
+
+        else:
+            return True, self.conf.shutdown_time_short
 
     def _start_job(self, *jobs):
         for job in jobs:
@@ -195,7 +197,7 @@ class Scheduler(object):
             return False
 
         extra_srv_count = min(job.max_server_count - job.server_count, len(av_servers))
-        if extra_srv_count > 0 and self.param_enable:
+        if self.param_enabled:
             return (
                 0.5
                 < (

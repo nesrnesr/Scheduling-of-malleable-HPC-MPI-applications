@@ -1,4 +1,5 @@
 import logging
+
 import pandas as pd
 
 # from .Swarm import Swarm
@@ -23,7 +24,7 @@ def main():
     seed = 2
     # run expt with no reconfig and no power off
     experiment = Experiments(
-        reconfig_enable=False, power_off_enable=False, param_enable=False
+        reconfig_enabled=False, power_off_enabled=False, param_enabled=False
     )
     configuration = SchedulerConfig
     stats = experiment.run_expts(
@@ -34,7 +35,7 @@ def main():
     print("done")
     # Without param
     experiment = Experiments(
-        reconfig_enable=True, power_off_enable=True, param_enable=False
+        reconfig_enabled=True, power_off_enabled=True, param_enabled=False
     )
     configuration = SchedulerConfig.random()
     stats = experiment.run_expts(
@@ -44,7 +45,7 @@ def main():
     stats_pd.to_csv("withoutparam.csv")
     # run expt with reconfig and no power off
     experiment = Experiments(
-        reconfig_enable=True, power_off_enable=False, param_enable=False
+        reconfig_enabled=True, power_off_enabled=False, param_enabled=False
     )
     configuration = SchedulerConfig
     stats = experiment.run_expts(
@@ -55,7 +56,7 @@ def main():
     print("done")
     # run expt with reconfig and power off and param from swarm
     experiment = Experiments(
-        reconfig_enable=True, power_off_enable=True, param_enable=True
+        reconfig_enabled=True, power_off_enabled=True, param_enabled=True
     )
     configuration = SchedulerConfig
     stats = experiment.run_expts(
@@ -65,7 +66,7 @@ def main():
     stats_pd.to_csv("param_stats.csv")
     # Random parameters
     experiment = Experiments(
-        reconfig_enable=True, power_off_enable=True, param_enable=True
+        reconfig_enabled=True, power_off_enabled=True, param_enabled=True
     )
     configuration = SchedulerConfig.random()
     stats = experiment.run_expts(
