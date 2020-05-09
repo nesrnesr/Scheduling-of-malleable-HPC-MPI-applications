@@ -1,14 +1,33 @@
-from math import inf
+from dataclasses import dataclass
 from random import seed
 from statistics import mean, stdev
-
-import pandas as pd
 
 from .Experiments import Experiments
 from .Particle import Particle
 from .Scheduler import SchedulerConfig
-from .Visualizer import Visualizer
-from .EpochStats import EpochStats
+
+
+@dataclass
+class EpochCost:
+    epoch: int
+    min: float
+    max: float
+    mean: float
+    std: float
+
+    @classmethod
+    def from_costs(cls, epoch, particules_cost):
+        return cls(
+            epoch,
+            min(particules_cost),
+            max(particules_cost),
+            mean(particules_cost),
+            stdev(particules_cost),
+        )
+
+    def to_dict(self):
+        dict_obj = self.__dict__
+        return dict_obj
 
 
 class Swarm(object):
@@ -21,82 +40,42 @@ class Swarm(object):
         self.num_srvs = num_srvs
         self.num_exp = num_exp
         self.best_particle = SchedulerConfig.random()
-        self.best_cost = inf
         self.experiment = Experiments()
 
-    def run_epochs(self, num_epochs, draw_stats=False, draw_graph=False):
-        epochs_stats = []
+    def run_epochs(self, num_epochs, stat_handler):
+        epochs_costs = []
         for i in range(num_epochs):
-            print("epoch: ", i)
-            epochs_stats.append(self._run_epoch(i, draw_stats))
-        if draw_graph:
-            self._draw_graph(
-                num_epochs, pd.DataFrame([stat.to_dict() for stat in epochs_stats])
-            )
-        #   save final best config
-        df_best_config = pd.DataFrame([self.best_particle.config.to_dict()])
-        print(df_best_config)
-        df_best_config.to_csv("best_config.csv")
-        df_stat = pd.DataFrame([stat.to_dict() for stat in epochs_stats])
-        df_stat.to_csv("stats.csv")
+            epoch_cost = self._run_epoch(i, stat_handler)
+            epochs_costs.append(epoch_cost)
+        return epochs_costs
 
-    def _run_epoch(self, num_epoch, draw_stats):
-        self.best_cost = inf
-        self.epoch_costs = []
+    def _run_epoch(self, num_epoch, stat_handler):
+        particules_exp_stats = []
+        particules_cost = []
+        best_cost = None
+
         for i, particle in enumerate(self.population):
-            print("Particle: ", i)
-            df_configs = particle.config.to_dict()
-            print(df_configs)
             stats = self.experiment.run_expts(
                 particle.config,
                 num_srvs=self.num_srvs,
                 num_expts=self.num_exp,
                 seed_num=num_epoch,
             )
-            if draw_stats:
-                self._draw_stats(num_epoch, i, stats, particle.config)
+            if stat_handler is not None:
+                stat_handler(num_epoch, i, stats)
+            particules_exp_stats.append(stats)
             cost = mean([stat.cost for stat in stats])
-            self.epoch_costs.append(cost)
-            if cost < self.best_cost:
-                self.best_cost = cost
+            particules_cost.append(cost)
+            if best_cost is None or cost < best_cost:
+                best_cost = cost
                 self.best_particle = particle
             particle.update_cost(cost)
 
         for particle in self.population:
             particle.update_position(self.best_particle.config)
 
-        print(self.best_cost)
-        self.configs()
-        return EpochStats(
-            num_epoch,
-            min(self.epoch_costs),
-            max(self.epoch_costs),
-            mean(self.epoch_costs),
-            stdev(self.epoch_costs),
-        )
+        return EpochCost.from_costs(num_epoch, particules_cost)
 
-    def _draw_stats(self, num_epoch, particle_idx, stats, config):
-        visualizer = Visualizer()
-
-        for i, stat in enumerate(stats):
-            visualizer.draw_gantt(
-                stat,
-                f"./results/seed_{self.seed}/epoch_{num_epoch}/particule-{particle_idx}-{i}.png",
-            )
-
-        df_stat = pd.DataFrame([stat.to_dict() for stat in stats])
-        print("Experiment stats:\n", df_stat)
-        print("Mean cost: ", df_stat["cost"].mean())
-        print("Tuning configs:\n", config)
-
-    def _draw_graph(self, num_epoch, stats):
-        visualizer = Visualizer()
-        visualizer.draw_graph(
-            stats, f"./results/seed_{self.seed}/num_epoch{num_epoch}/graph.png",
-        )
-
-    def configs(self):
-        df_configs = pd.DataFrame([p.config.to_dict() for p in self.population])
-        print("Experiment configs:\n", df_configs)
-
-    # Save stats at each epoch: best/min, max, mean stdv cost
+    # def _configs(self):
+    #     df_configs = pd.DataFrame([p.config.to_dict() for p in self.population])
+    #     print("Experiment configs:\n", df_configs)

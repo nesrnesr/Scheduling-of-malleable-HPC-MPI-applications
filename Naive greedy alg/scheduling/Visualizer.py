@@ -3,6 +3,8 @@ from pathlib import Path
 from random import uniform
 
 import matplotlib.pyplot as plt
+import pandas as pd
+import structlog
 
 
 @dataclass
@@ -17,6 +19,9 @@ class Color:
     g: float
     b: float
     a: float = 1
+
+
+logger = structlog.getLogger(__name__)
 
 
 class Visualizer:
@@ -70,6 +75,13 @@ class Visualizer:
         ax.set_xlabel("Epoch")
         ax.set_ylabel("Mean cost")
         plt.savefig(filepath, dpi=200)
+
+    def to_csv(self, table: list, path: str):
+        path = Path(path)
+        path.parent.mkdir(0o755, parents=True, exist_ok=True)
+        df_table = pd.DataFrame(table)
+        logger.debug(f"\n{df_table}", name=path.name)
+        df_table.to_csv(path)
 
     def _draw_rectangle(self, tl, size, color):
         rectangle = plt.Rectangle((tl.x, tl.y), size.x, size.y, fc=astuple(color))
