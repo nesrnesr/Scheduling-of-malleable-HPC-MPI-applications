@@ -27,7 +27,7 @@ def run_all_experiments(visualizer):
         logger.debug("Done.")
 
     run_experiments(
-        "all_false_stats",
+        "fifo",
         SchedulerConfig(),
         reconfig_enabled=False,
         power_off_enabled=False,
@@ -35,7 +35,7 @@ def run_all_experiments(visualizer):
     )
 
     run_experiments(
-        "withoutparam",
+        "fifo_reconfig_poweroff",
         SchedulerConfig.random(),
         reconfig_enabled=True,
         power_off_enabled=True,
@@ -43,7 +43,7 @@ def run_all_experiments(visualizer):
     )
 
     run_experiments(
-        "reconfig_stats",
+        "fifo_reconfig",
         SchedulerConfig(),
         reconfig_enabled=True,
         power_off_enabled=False,
@@ -51,7 +51,15 @@ def run_all_experiments(visualizer):
     )
 
     run_experiments(
-        "param_stats",
+        "fifo_poweroff",
+        SchedulerConfig(),
+        reconfig_enabled=False,
+        power_off_enabled=True,
+        param_enabled=False,
+    )
+
+    run_experiments(
+        "swarm_param",
         SchedulerConfig(),
         reconfig_enabled=True,
         power_off_enabled=True,
@@ -59,7 +67,7 @@ def run_all_experiments(visualizer):
     )
 
     run_experiments(
-        "random",
+        "random_params",
         SchedulerConfig.random(),
         reconfig_enabled=True,
         power_off_enabled=True,

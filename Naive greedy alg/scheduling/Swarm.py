@@ -50,7 +50,6 @@ class Swarm(object):
         return epochs_costs
 
     def _run_epoch(self, num_epoch, stat_handler):
-        particules_exp_stats = []
         particules_cost = []
         best_cost = None
 
@@ -63,7 +62,6 @@ class Swarm(object):
             )
             if stat_handler is not None:
                 stat_handler(num_epoch, i, stats)
-            particules_exp_stats.append(stats)
             cost = mean([stat.cost for stat in stats])
             particules_cost.append(cost)
             if best_cost is None or cost < best_cost:
