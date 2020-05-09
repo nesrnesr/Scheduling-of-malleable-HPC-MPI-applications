@@ -1,8 +1,9 @@
-import logging
 from dataclasses import astuple, dataclass
 from operator import attrgetter, methodcaller
 from random import random, sample, uniform
 from statistics import mean, stdev
+
+import structlog
 
 from .Job import Job
 from .Server import Server
@@ -79,7 +80,7 @@ class Scheduler(object):
         self.req_by_id = {}
         self.active_jobs = []
         self.complete_jobs = {}
-        self.logger = logging.getLogger(__name__)
+        self.logger = structlog.getLogger(__name__)
 
     def is_working(self):
         return self.req_queue or (
@@ -101,13 +102,18 @@ class Scheduler(object):
 
         # Schedule jobs in the queue
         av_servers = [server for server in self.servers if not server.is_busy(time)]
-        self.logger.debug(f"{time}: av_servers: {av_servers}")
+        self.logger.debug(
+            "update_schedule",
+            time=time,
+            av_servers=av_servers,
+            req_queue=self.req_queue,
+        )
         while self.req_queue and av_servers:
             job_req = self.req_queue[-1]
             job_servers = self._allocate_servers(av_servers, job_req)
             if not job_servers:
                 break
-            self.logger.debug(f"{time} req {job_req}")
+            self.logger.debug("schedule job req", time=time, req=job_req)
             job = Job.from_request(job_req, job_servers, start_time=time)
             self._start_job(job)
             self.req_queue.pop()
@@ -162,7 +168,7 @@ class Scheduler(object):
         for job in jobs:
             self.active_jobs.append(job)
             self.logger.debug(
-                f"new {job} on {len(job.servers)} servers, active -> {self.active_jobs}"
+                "new job", server_count=len(job.servers), active_jobs=self.active_jobs
             )
             for server in job.servers:
                 server.add_job(job)
@@ -170,7 +176,7 @@ class Scheduler(object):
     def _remove_job(self, *jobs):
         for job in jobs:
             self.active_jobs.remove(job)
-            self.logger.debug(f"remove {job}, active: {self.active_jobs}")
+            self.logger.debug(f"remove job", job=job, active_jobs=self.active_jobs)
             for server in job.servers:
                 server.remove_job(job)
 
@@ -185,7 +191,9 @@ class Scheduler(object):
         job_servers = job.servers + extra_srvs
         av_servers = [server for server in av_servers if server not in extra_srvs]
 
-        self.logger.debug(f"{time} reconfigure {job} with {len(job_servers)} servers")
+        self.logger.debug(
+            "reconfigure job", time=time, job=job, server_count=len(job_servers)
+        )
         reconfig_job, job_rest = job.reconfigure(job_servers, time)
         self._remove_job(job)
         self._start_job(reconfig_job, job_rest)
@@ -219,7 +227,6 @@ class Scheduler(object):
 
     def _allocate_servers(self, available_servers, job_req):
         min_servers = min(job_req.max_num_servers, len(available_servers))
-        # self.logger.debug(f"Try allocating {job_req} with {min_servers} ")
         if min_servers < job_req.min_num_servers:
             return []
         return sample(available_servers, k=min_servers)

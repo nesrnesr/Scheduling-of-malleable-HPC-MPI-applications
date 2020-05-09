@@ -1,6 +1,5 @@
-import logging
-
 import pandas as pd
+import structlog
 
 # from .Swarm import Swarm
 from .Experiments import Experiments
@@ -10,6 +9,7 @@ SERVER_COUNT = 10
 EXPTS_COUNT = 100
 SEED = 2
 
+logger = structlog.getLogger(__name__)
 
 def run_experiments(expt_name, scheduler_config, **kwargs):
     experiment = Experiments(**kwargs)
@@ -66,7 +66,7 @@ def run_all_experiments():
 
 
 def main():
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(name)s %(levelname)-5s: %(message)s"
-    )
-    run_all_experiments()
+    init_logging(__name__)
+    visualizer = Visualizer()
+    # run_all_experiments(visualizer)
+    run_swarm(visualizer)
