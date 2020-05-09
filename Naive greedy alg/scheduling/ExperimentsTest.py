@@ -1,18 +1,31 @@
-import pandas as pd
-import structlog
+import logging
 
-# from .Swarm import Swarm
 from .Experiments import Experiments
 from .Scheduler import SchedulerConfig
+
+logger = logging.getLogger(__name__)
 
 SERVER_COUNT = 10
 EXPTS_COUNT = 100
 SEED = 2
 
-logger = structlog.getLogger(__name__)
 
+def run_all_experiments(visualizer):
+    output_dir = f"./results/swarm/seed_{SEED}"
 
-def run_all_experiments():
+    def run_experiments(expt_name, scheduler_config, **kwargs):
+        experiment = Experiments(**kwargs)
+        stats = experiment.run_expts(
+            config=scheduler_config,
+            num_srvs=SERVER_COUNT,
+            num_expts=EXPTS_COUNT,
+            seed_num=SEED,
+        )
+        visualizer.to_csv(
+            [stat.to_dict() for stat in stats], f"{output_dir}/{expt_name}.csv"
+        )
+        logger.debug("Done.")
+
     run_experiments(
         "all_false_stats",
         SchedulerConfig(),
@@ -52,10 +65,3 @@ def run_all_experiments():
         power_off_enabled=True,
         param_enabled=True,
     )
-
-
-def main():
-    init_logging(__name__)
-    visualizer = Visualizer()
-    # run_all_experiments(visualizer)
-    run_swarm(visualizer)
