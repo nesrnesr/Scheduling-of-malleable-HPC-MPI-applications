@@ -34,6 +34,9 @@ class Server:
         self.index = index
         self.jobs = []
 
+    def __repr__(self):
+        return f"Server-{self.index}: {self.jobs}"
+
     def add_job(self, job):
         self.jobs.append(job)
 
