@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from random import seed
 from statistics import mean, stdev
 
+import structlog
+
 from .Experiments import Experiments
 from .Particle import Particle
 from .Scheduler import SchedulerConfig
@@ -9,14 +11,26 @@ from .Scheduler import SchedulerConfig
 
 @dataclass
 class EpochCost:
-    epoch: int
-    min: float
-    max: float
-    mean: float
-    std: float
+    """A container for the calculated costs of one epoch.
+    """
+
+    epoch: int  #: The epoch identifier.
+    min: float  #: The minimum calculated cost during the epoch.
+    max: float  #: The maximum calculated cost during the epoch.
+    mean: float  #: The mean cost value of the epoch.
+    std: float  #: The standard deviation of the calculated costs during the epoch.
 
     @classmethod
-    def from_costs(cls, epoch, particules_cost):
+    def from_costs(cls, epoch: int, particules_cost: list):
+        """Constructs an EpochCost object from a list of calculated costs.
+
+        Args:
+            epoch: The epoch identifier.
+            particules_cost: A list of all the calculated costs during the epoch.
+
+        Returns:
+            An EpochCost object.
+        """
         return cls(
             epoch,
             min(particules_cost),
@@ -26,34 +40,81 @@ class EpochCost:
         )
 
     def to_dict(self):
+        """Converts an EpochCost attributes into a python dictionary
+
+        Returns:
+            A dictionary with the attributes of an EpochCost object.
+        """
+
         dict_obj = self.__dict__
         return dict_obj
 
 
 class Swarm(object):
-    def __init__(self, seed_num, num_particles, num_srvs, num_exp=10):
+    """An environment in which a population of Particles evolves.
+    """
+
+    def __init__(self, seed_num: int, num_particles: int, num_srvs: int, num_exp=10):
+        """Creates a Swarm object.
+
+        Args:
+            seed_num: The Experiments seed.
+            num_particles: The Particles count within the Swarm.
+            num_srvs: The total servers count.
+            num_exp: The total count of experiments.
+        """
+        assert num_particles > 1, "The number of particles must be greater than 1"
         seed(seed_num)
-        self.seed = seed_num
+        self.seed = seed_num  #: The Experiments' seed.
         self.population = [
             Particle(SchedulerConfig.random()) for _ in range(num_particles)
-        ]
-        self.num_srvs = num_srvs
-        self.num_exp = num_exp
-        self.best_particle = SchedulerConfig.random()
-        self.experiment = Experiments()
+        ]  #: list of Particle objects: A container for the members of the the Swarm.
+        self.num_srvs = num_srvs  #: The total servers count.
+        self.num_exp = num_exp  #: The total count of experiments.
+        self.best_particle = None
+        """Particle: The Particle with lowest cost in the Swarm."""
+        self.experiment = Experiments()  #: Experiments: The experimental environment.
+        self.logger = structlog.getLogger(__name__)  #: The Swarm's logger.
 
-    def run_epochs(self, num_epochs, stat_handler):
+    def run_epochs(self, num_epochs: int, stat_handler):
+        """Runs the experiments for the specified number of epochs.
+
+        Args:
+            num_epochs: The epoch count to be run.
+            stat_handler: A method handler for injecting a drawing function \
+            (draw_stats).
+
+        Returns:
+            A list of EpochCost objects encapsulating all costs resulting \
+            from each epochs runs.
+        """
         epochs_costs = []
         for i in range(num_epochs):
+            self.logger.info("running epoch", epoch=f"{i+1}/{num_epochs}")
             epoch_cost = self._run_epoch(i, stat_handler)
             epochs_costs.append(epoch_cost)
         return epochs_costs
 
-    def _run_epoch(self, num_epoch, stat_handler):
+    def _run_epoch(self, num_epoch: int, stat_handler):
+        """Runs the experiments for one epoch.
+
+        Args:
+            num_epoch: The epoch identifier.
+            stat_handler: A method handler for injecting a drawing function \
+            (draw_stats).
+
+        Returns:
+            An EpochCost object encapsulating all costs resulting from the each run.
+        """
         particules_cost = []
         best_cost = None
 
         for i, particle in enumerate(self.population):
+            self.logger.info(
+                "running experiments",
+                particle=f"{i+1}/{len(self.population)}",
+                epoch=num_epoch + 1,
+            )
             stats = self.experiment.run_expts(
                 particle.config,
                 num_srvs=self.num_srvs,
@@ -73,7 +134,3 @@ class Swarm(object):
             particle.update_position(self.best_particle.config)
 
         return EpochCost.from_costs(num_epoch, particules_cost)
-
-    # def _configs(self):
-    #     df_configs = pd.DataFrame([p.config.to_dict() for p in self.population])
-    #     print("Experiment configs:\n", df_configs)

@@ -3,6 +3,7 @@ import logging.config
 import structlog
 
 
+# Basic Logger
 def init(module_name):
     timestamper = structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S")
     pre_chain = [

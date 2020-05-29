@@ -6,9 +6,9 @@ from .Logging import init as init_logging
 from .Swarm import Swarm
 from .Visualizer import Visualizer
 
-EPOCH_COUNT = 10
+EPOCH_COUNT = 6
 PARTICULE_COUNT = 4
-SERVER_COUNT = 4
+SERVER_COUNT = 10
 EXPTS_COUNT = 1
 SEED = 2
 RESULT_DIR = f"./results/swarm/seed_{SEED}"
@@ -16,6 +16,7 @@ RESULT_DIR = f"./results/swarm/seed_{SEED}"
 logger = structlog.getLogger(__name__)
 
 
+# Runs the training of the swarm
 def run_swarm(visualizer, draw_graph=False, draw_exp_stats=False):
     def draw_stats(num_epoch, particle_idx, exp_stats):
         for i, stat in enumerate(exp_stats):
@@ -59,4 +60,4 @@ def main():
     init_logging(__name__)
     visualizer = Visualizer()
     # run_all_experiments(visualizer)
-    run_swarm(visualizer)
+    run_swarm(visualizer, draw_graph=True, draw_exp_stats=False)

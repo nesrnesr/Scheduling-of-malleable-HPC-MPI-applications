@@ -10,6 +10,7 @@ EXPTS_COUNT = 100
 SEED = 2
 
 
+# Test file for running the 6 Benchmarking setups in the report.
 def run_all_experiments(visualizer):
     output_dir = f"./results/swarm/seed_{SEED}"
 
@@ -26,19 +27,12 @@ def run_all_experiments(visualizer):
         )
         logger.debug("Done.")
 
+    # Reconfigurations and Power-offs take place whenever possible.-------------
     run_experiments(
         "fifo",
         SchedulerConfig(),
         reconfig_enabled=False,
         power_off_enabled=False,
-        param_enabled=False,
-    )
-
-    run_experiments(
-        "fifo_reconfig_poweroff",
-        SchedulerConfig.random(),
-        reconfig_enabled=True,
-        power_off_enabled=True,
         param_enabled=False,
     )
 
@@ -59,16 +53,25 @@ def run_all_experiments(visualizer):
     )
 
     run_experiments(
-        "swarm_param",
-        SchedulerConfig(),
+        "fifo_reconfig_poweroff",
+        SchedulerConfig.random(),
+        reconfig_enabled=True,
+        power_off_enabled=True,
+        param_enabled=False,
+    )
+
+    # Reconfigurations and Power-offs take place after a decision is taken possible.
+    run_experiments(
+        "random_params",
+        SchedulerConfig.random(),
         reconfig_enabled=True,
         power_off_enabled=True,
         param_enabled=True,
     )
 
     run_experiments(
-        "random_params",
-        SchedulerConfig.random(),
+        "swarm_param",
+        SchedulerConfig(),
         reconfig_enabled=True,
         power_off_enabled=True,
         param_enabled=True,
