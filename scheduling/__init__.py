@@ -3,24 +3,26 @@ import os
 
 import pandas as pd
 import structlog
+import yaml
 
 from .ExperimentsTest import run_all_experiments
 from .Logging import init as init_logging
 from .Swarm import Swarm
 from .Visualizer import Visualizer
 
-EPOCH_COUNT = 6
-PARTICULE_COUNT = 4
-SERVER_COUNT = 10
-EXPTS_COUNT = 1
-SEED = 2
-RESULT_DIR = f"./results/swarm/seed_{SEED}"
+RESULT_DIR = f"./results/swarm_training/seed_"
 
 logger = structlog.getLogger(__name__)
 
 
-# Runs the training of the swarm
-def run_swarm(visualizer, draw_graph=False, draw_exp_stats=False):
+def run_swarm(visualizer: Visualizer, config: dict):
+    """Runs the training of the Swarm.
+    Args:
+        visualizer: The visualizer object for drawing graphs and charts.
+        config: The loaded configuration of the swarm training.
+    """
+    seed = config["SEED"]
+
     def draw_stats(num_epoch, particle_idx, exp_stats):
         for i, stat in enumerate(exp_stats):
             visualizer.draw_gantt(
@@ -38,16 +40,18 @@ def run_swarm(visualizer, draw_graph=False, draw_exp_stats=False):
         )
 
     swarm = Swarm(
-        seed_num=SEED,
-        num_particles=PARTICULE_COUNT,
-        num_srvs=SERVER_COUNT,
-        num_exp=EXPTS_COUNT,
+        seed_num=seed,
+        num_particles=config["PARTICULE_COUNT"],
+        num_srvs=config["SERVER_COUNT"],
+        num_exp=config["EXPTS_COUNT"],
     )
 
-    stat_handler = draw_stats if draw_exp_stats else None
-    epoch_costs = swarm.run_epochs(num_epochs=EPOCH_COUNT, stat_handler=stat_handler)
+    stat_handler = draw_stats if config["draw_particle_gantt"] else None
+    epoch_costs = swarm.run_epochs(
+        num_epochs=config["EPOCH_COUNT"], stat_handler=stat_handler
+    )
 
-    if draw_graph:
+    if config["draw_cost_graph"]:
         df_cost = pd.DataFrame([cost.to_dict() for cost in epoch_costs])
         visualizer.draw_graph(df_cost, f"{RESULT_DIR}/swarm_cost_graph.png")
 
@@ -93,5 +97,10 @@ def main(args):
     init_logging(__name__)
     args = get_args(args)
     visualizer = Visualizer()
-    # run_all_experiments(visualizer)
-    run_swarm(visualizer, draw_graph=True, draw_exp_stats=False)
+    config = load_config()
+
+    if vars(args).get("train_swarm"):
+        run_swarm(visualizer, config["swarm"])
+
+    if vars(args).get("run_benchmarks"):
+        run_all_experiments(visualizer, config["benchmarks"])

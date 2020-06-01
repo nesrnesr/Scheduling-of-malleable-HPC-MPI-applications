@@ -1,26 +1,29 @@
 import logging
+from pathlib import Path
+
+import pandas
 
 from .Experiments import Experiments
 from .Scheduler import SchedulerConfig
 
 logger = logging.getLogger(__name__)
 
-SERVER_COUNT = 10
-EXPTS_COUNT = 100
-SEED = 2
-
-
 # Test file for running the 6 Benchmarking setups in the report.
-def run_all_experiments(visualizer):
-    output_dir = f"./results/swarm/seed_{SEED}"
+
+
+
+
+def run_all_experiments(visualizer, config):
+    seed = config["SEED"]
+    output_dir = f"./results/benchmarking_experiments/seed_{seed}"
 
     def run_experiments(expt_name, scheduler_config, **kwargs):
         experiment = Experiments(**kwargs)
         stats = experiment.run_expts(
             config=scheduler_config,
-            num_srvs=SERVER_COUNT,
-            num_expts=EXPTS_COUNT,
-            seed_num=SEED,
+            num_srvs=config["SERVER_COUNT"],
+            num_expts=config["EXPTS_COUNT"],
+            seed_num=config["SEED"],
         )
         visualizer.to_csv(
             [stat.to_dict() for stat in stats], f"{output_dir}/{expt_name}.csv"

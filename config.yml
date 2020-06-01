@@ -1,0 +1,15 @@
+swarm:
+  EPOCH_COUNT: 100
+  PARTICULE_COUNT: 2
+  SERVER_COUNT : 10
+  EXPTS_COUNT : 5
+  SEED : 1
+  draw_particle_gantt : False
+  draw_cost_graph : False
+
+benchmarks:
+  SERVER_COUNT : 5
+  EXPTS_COUNT : 10
+  SEED : 1
+  draw_experiment_gantt : False
+  draw_experiment_cost : False
