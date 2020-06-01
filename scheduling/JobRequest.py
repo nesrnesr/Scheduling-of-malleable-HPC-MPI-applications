@@ -3,6 +3,9 @@ from dataclasses import dataclass
 
 @dataclass
 class JobRequest:
+    """A representation of a user input used to construct a Job object.
+    """
+
     id: str  #: The JobRequest identifier.
     sub_time: int  #: The submission time of the job.
     alpha: float  #: The speedup factor alpha.

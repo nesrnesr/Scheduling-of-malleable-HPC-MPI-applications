@@ -24,10 +24,16 @@ def run_swarm(visualizer: Visualizer, config: dict):
     seed = config["SEED"]
 
     def draw_stats(num_epoch, particle_idx, exp_stats):
+        """A method to be injected in the run_epochs to draw the stats within the epoch.
+        Args:
+            num_epoch: The epoch identifier.
+            particle_idx: The particle identifier.
+            exp_stats: The list from which the stats are drawn.
+        """
         for i, stat in enumerate(exp_stats):
             visualizer.draw_gantt(
                 stat,
-                f"{RESULT_DIR}/epoch_{num_epoch}/particule-{particle_idx}-{i}.png",
+                f"{RESULT_DIR}{seed}/epoch_{num_epoch}/particule-{particle_idx}-exp-{i}.png",
             )
 
         df_stat = pd.DataFrame([stat.to_dict() for stat in exp_stats])
@@ -53,13 +59,14 @@ def run_swarm(visualizer: Visualizer, config: dict):
 
     if config["draw_cost_graph"]:
         df_cost = pd.DataFrame([cost.to_dict() for cost in epoch_costs])
-        visualizer.draw_graph(df_cost, f"{RESULT_DIR}/swarm_cost_graph.png")
+        visualizer.draw_graph(df_cost, f"{RESULT_DIR}{seed}/swarm_cost_graph.png")
 
     visualizer.to_csv(
-        [swarm.best_particle.config.to_dict()], f"{RESULT_DIR}/swarm_best_config.csv"
+        [swarm.best_particle.config.to_dict()],
+        f"{RESULT_DIR}{seed}/swarm_best_config.csv",
     )
     visualizer.to_csv(
-        [cost.to_dict() for cost in epoch_costs], f"{RESULT_DIR}/swarm_costs.csv"
+        [cost.to_dict() for cost in epoch_costs], f"{RESULT_DIR}{seed}/swarm_costs.csv"
     )
 
 

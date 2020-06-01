@@ -11,6 +11,16 @@ logger = logging.getLogger(__name__)
 # Test file for running the 6 Benchmarking setups in the report.
 
 
+def load_best_config(seed, path=None):
+    if path is None:
+        path = f"./results/swarm_training/seed_{seed}/swarm_best_config.csv"
+    if not Path(path).exists():
+        logger.debug("Specified best config does not exist. Loading default config.")
+        return SchedulerConfig()
+    result = pandas.read_csv(path)
+    result = result.loc[:, ~result.columns.str.contains("^Unnamed")]
+    best_config = SchedulerConfig(**result.iloc[0, :].to_dict())
+    return best_config
 
 
 def run_all_experiments(visualizer, config):
@@ -25,8 +35,21 @@ def run_all_experiments(visualizer, config):
             num_expts=config["EXPTS_COUNT"],
             seed_num=config["SEED"],
         )
+
+        if config["draw_experiment_gantt"]:
+            for i, stat in enumerate(stats):
+                visualizer.draw_gantt(
+                    stat, f"{output_dir}/{expt_name}/experiment_{i}.png"
+                )
+        if config["draw_experiment_cost"]:
+            df_stats = pandas.DataFrame([stat.to_dict() for stat in stats])
+            visualizer.draw_graph(
+                df_stats, f"{output_dir}/{expt_name}/{expt_name}_cost.png"
+            )
+
         visualizer.to_csv(
-            [stat.to_dict() for stat in stats], f"{output_dir}/{expt_name}.csv"
+            [stat.to_dict() for stat in stats],
+            f"{output_dir}/{expt_name}/{expt_name}.csv",
         )
         logger.debug("Done.")
 
@@ -74,7 +97,7 @@ def run_all_experiments(visualizer, config):
 
     run_experiments(
         "swarm_param",
-        SchedulerConfig(),
+        load_best_config(seed),
         reconfig_enabled=True,
         power_off_enabled=True,
         param_enabled=True,

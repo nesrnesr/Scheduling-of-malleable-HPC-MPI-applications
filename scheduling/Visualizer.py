@@ -7,7 +7,6 @@ import pandas as pd
 import structlog
 
 from .Scheduler import SchedulerStats
-from .Swarm import EpochCost
 
 
 @dataclass
@@ -75,23 +74,44 @@ class Visualizer:
         plt.savefig(filepath, dpi=200)
         plt.close(filepath)
 
-    def draw_graph(self, stats, filepath: str):
+    def draw_graph(self, stats, filepath: str, show_range=False):
         """Draws a 2D graph of the mean cost against the epoch count.
 
         Directories referenced by filepath are created similar to mkdir -p.
 
         Args:
-            stats: A container object for the epoch's statistics.
-            filepath (str): Location for writing the resulting chart.
+            stats: A container object for the epoch's or experiment's statistics.
+            filepath: Location for writing the resulting chart.
+            show_range: A flag for enabling showing the min-max range as a filled\
+            up area on the graph. Defaults to False, as when running low number of\
+            epochs, the resulting scale of the graph can be too large which lead\
+            to a flattenning of the mean cost.
 
         """
         path = Path(filepath)
         path.parent.mkdir(0o755, parents=True, exist_ok=True)
         fig, ax = plt.subplots(1)
-        ax.plot(stats["epoch"], stats["mean"], lw=2, color="blue")
+        if "epoch" in stats:
+            # Drawing results of swarm training.
+            xlabel = "Epoch"
+            ylabel = "Mean cost"
+            ax.plot(stats["epoch"], stats["mean"], lw=2, color="blue")
+            if show_range:
+                ax.fill_between(
+                    stats["epoch"],
+                    stats["min"],
+                    stats["max"],
+                    facecolor="blue",
+                    alpha=0.1,
+                )
+        else:
+            # Drawing results of bench experiments.
+            ax.plot(stats.index.values.tolist(), stats["cost"], lw=2, color="blue")
+            xlabel = "Experiments count"
+            ylabel = "Cost"
         ax.legend(loc="upper right")
-        ax.set_xlabel("Epoch")
-        ax.set_ylabel("Mean cost")
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
         plt.savefig(filepath, dpi=200)
 
     def to_csv(self, table: list, path: str):

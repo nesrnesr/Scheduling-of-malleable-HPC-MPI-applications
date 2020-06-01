@@ -1,3 +1,4 @@
+from copy import deepcopy
 from dataclasses import astuple, dataclass
 from operator import attrgetter, methodcaller
 from random import random, sample, uniform
@@ -84,7 +85,7 @@ class SchedulerStats:
 
         Discards the list of the completed jobs from the returned dictionary.
         """
-        dict_obj = self.__dict__
+        dict_obj = deepcopy(self.__dict__)
         dict_obj.pop("complete_jobs")
         return dict_obj
 
