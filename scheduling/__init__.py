@@ -1,3 +1,6 @@
+import argparse
+import os
+
 import pandas as pd
 import structlog
 
@@ -56,8 +59,39 @@ def run_swarm(visualizer, draw_graph=False, draw_exp_stats=False):
     )
 
 
-def main():
+def get_args(args):
+    """Parses the input arguments."""
+    parser = argparse.ArgumentParser(
+        description="Specifies whether the scheduling operation to perform."
+    )
+    if args[0].startswith("--train"):
+        parser.add_argument(
+            "--train-swarm",
+            action="store_true",
+            required=True,
+            help="Initiates the training of a swarm with default parameters",
+        )
+    else:
+        parser.add_argument(
+            "--run-benchmarks",
+            action="store_true",
+            required=True,
+            help="Initiates the training of a swarm with default parameters",
+        )
+    args = parser.parse_args(args=args)
+    return args
+
+
+def load_config():
+    """Loads the YAML configuration."""
+    stream = open(os.getcwd() + "/config.yml", "r")
+    dictionary = yaml.safe_load(stream)
+    return dictionary
+
+
+def main(args):
     init_logging(__name__)
+    args = get_args(args)
     visualizer = Visualizer()
     # run_all_experiments(visualizer)
     run_swarm(visualizer, draw_graph=True, draw_exp_stats=False)
