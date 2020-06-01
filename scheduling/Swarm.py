@@ -1,9 +1,6 @@
-import concurrent.futures
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from random import seed
 from statistics import mean, stdev
-from threading import Lock
 
 import structlog
 
@@ -24,22 +21,22 @@ class EpochCost:
     std: float  #: The standard deviation of the calculated costs during the epoch.
 
     @classmethod
-    def from_costs(cls, epoch: int, particules_cost: list):
+    def from_costs(cls, epoch: int, particles_cost: list):
         """Constructs an EpochCost object from a list of calculated costs.
 
         Args:
             epoch: The epoch identifier.
-            particules_cost: A list of all the calculated costs during the epoch.
+            particles_cost: A list of all the calculated costs during the epoch.
 
         Returns:
             An EpochCost object.
         """
         return cls(
             epoch,
-            min(particules_cost),
-            max(particules_cost),
-            mean(particules_cost),
-            stdev(particules_cost),
+            min(particles_cost),
+            max(particles_cost),
+            mean(particles_cost),
+            stdev(particles_cost),
         )
 
     def to_dict(self):
@@ -78,7 +75,6 @@ class Swarm(object):
         """Particle: The Particle with lowest cost in the Swarm."""
         self.experiment = Experiments()  #: Experiments: The experimental environment.
         self.logger = structlog.getLogger(__name__)  #: The Swarm's logger.
-        self.executor = ThreadPoolExecutor()
 
     def run_epochs(self, num_epochs: int, stat_handler):
         """Runs the experiments for the specified number of epochs.
@@ -110,41 +106,32 @@ class Swarm(object):
         Returns:
             An EpochCost object encapsulating all costs resulting from the each run.
         """
-        particules_cost = []
+        particles_cost = []
         best_cost = None
-        lock = Lock()
-
-        def run_particule_experiments(particule, idx, best_cost):
-            stats = self.experiment.run_expts(
-                particle.config,
-                num_srvs=self.num_srvs,
-                num_expts=self.num_exp,
-                seed_num=num_epoch,
-            )
-            with lock:
-                if stat_handler is not None:
-                    stat_handler(num_epoch, idx, stats)
-                cost = mean([stat.cost for stat in stats])
-                particules_cost.append(cost)
-                if best_cost is None or cost < best_cost:
-                    best_cost = cost
-                    self.best_particle = particle
-                particle.update_cost(cost)
-
-        futures = []
         for i, particle in enumerate(self.population):
             self.logger.info(
                 "running experiments",
                 particle=f"{i+1}/{len(self.population)}",
                 epoch=num_epoch + 1,
             )
-            future = self.executor.submit(
-                run_particule_experiments, particle, i, best_cost
+            stats = self.experiment.run_expts(
+                particle.config,
+                num_srvs=self.num_srvs,
+                num_expts=self.num_exp,
+                seed_num=num_epoch,
             )
-            futures.append(future)
 
-        concurrent.futures.wait(futures, return_when=concurrent.futures.ALL_COMPLETED)
+            if stat_handler is not None:
+                stat_handler(num_epoch, i, stats)
+
+            cost = mean([stat.cost for stat in stats])
+            particles_cost.append(cost)
+            if best_cost is None or cost < best_cost:
+                best_cost = cost
+                self.best_particle = particle
+            particle.update_cost(cost)
+
         for particle in self.population:
             particle.update_position(self.best_particle.config)
 
-        return EpochCost.from_costs(num_epoch, particules_cost)
+        return EpochCost.from_costs(num_epoch, particles_cost)
