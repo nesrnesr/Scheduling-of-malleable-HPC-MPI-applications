@@ -42,12 +42,12 @@ def run_swarm(visualizer: Visualizer, config: dict):
             f"Mean cost",
             cost=df_stat["cost"].mean(),
             epoch=num_epoch,
-            particule_idx=particle_idx,
+            particule_idx=particle_idx + 1,
         )
 
     swarm = Swarm(
         seed_num=seed,
-        num_particles=config["PARTICULE_COUNT"],
+        num_particles=config["PARTICLE_COUNT"],
         num_srvs=config["SERVER_COUNT"],
         num_exp=config["EXPTS_COUNT"],
     )
@@ -73,22 +73,18 @@ def run_swarm(visualizer: Visualizer, config: dict):
 def get_args(args):
     """Parses the input arguments."""
     parser = argparse.ArgumentParser(
-        description="Specifies whether the scheduling operation to perform."
+        description="Specifies which the scheduling operation to perform."
     )
-    if args[0].startswith("--train"):
-        parser.add_argument(
-            "--train-swarm",
-            action="store_true",
-            required=True,
-            help="Initiates the training of a swarm with default parameters",
-        )
-    else:
-        parser.add_argument(
-            "--run-benchmarks",
-            action="store_true",
-            required=True,
-            help="Initiates the training of a swarm with default parameters",
-        )
+    parser.add_argument(
+        "--train-swarm",
+        action="store_true",
+        help="Initiates the training of a swarm with default parameters",
+    )
+    parser.add_argument(
+        "--run-benchmarks",
+        action="store_true",
+        help="Initiates the running of six benchmarking experiments.",
+    )
     args = parser.parse_args(args=args)
     return args
 

@@ -82,7 +82,8 @@ class Job:
 
     @staticmethod
     def exec_time(mass: int, server_count: int, alpha: float):
-        """Estimates the execution time of a Job according to its parameters.
+        """Estimates the makespan of a Job according to its mass and the\
+         number of servers it is assigned to.
 
         Args:
             mass: The amount of computation to be performed during the Job.
