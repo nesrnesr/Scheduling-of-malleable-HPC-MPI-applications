@@ -91,7 +91,7 @@ class Job:
             alpha: The speedup factor of the Job.
 
         Returns:
-            float: The execution time of the Job.
+            The execution time of the Job.
         """
         return mass / server_count ** alpha
 

@@ -29,7 +29,7 @@ class EpochCost:
             particles_cost: A list of all the calculated costs during the epoch.
 
         Returns:
-            An EpochCost object.
+            EpochCost: An EpochCost object.
         """
         return cls(
             epoch,
@@ -43,7 +43,7 @@ class EpochCost:
         """Converts an EpochCost attributes into a python dictionary
 
         Returns:
-            A dictionary with the attributes of an EpochCost object.
+            dict: A dictionary with the attributes of an EpochCost object.
         """
 
         dict_obj = self.__dict__
@@ -85,7 +85,7 @@ class Swarm(object):
             (draw_stats).
 
         Returns:
-            A list of EpochCost objects encapsulating all costs resulting \
+            list: A list of EpochCost objects encapsulating all costs resulting \
             from each epochs runs.
         """
         epochs_costs = []
@@ -104,7 +104,7 @@ class Swarm(object):
             (draw_stats).
 
         Returns:
-            An EpochCost object encapsulating all costs resulting from the each run.
+            EpochCost: An EpochCost object encapsulating all costs resulting from the each run.
         """
         particles_cost = []
         best_cost = None

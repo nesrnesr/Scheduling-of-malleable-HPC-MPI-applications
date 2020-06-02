@@ -29,11 +29,11 @@ Other features:
 
 ### How to install
 - Clone this project and enter the directory.
-- Execute the setup script by using `./setup`
+- Execute the setup script by using `./setup.sh`
 
 #### Use
 Use the command `./launcher.sh start --help`. and select which operation to run\
-To generate documentation use `./launcher.sh gendoc`\
+To generate documentation use `./launcher.sh gendoc`
 
 ##### Changing parameters.
 To produces visuals and/or change the parameters of either the swarm training or the benchmarking experiments, modify the `config.yml` file

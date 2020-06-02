@@ -138,7 +138,7 @@ class Scheduler(object):
         """Checks whether the scheduler has finished scheduling.
 
         Returns:
-            The boolean status of whether the scheduler has still work to do.
+            True if successful, False otherwise.
         """
         return self.req_queue or (
             self.active_jobs and not all(job.is_power_off() for job in self.active_jobs)

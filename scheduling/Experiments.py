@@ -96,7 +96,7 @@ class Experiments:
             seed_num: A seed used to update the job generator.
 
         Returns:
-            A list of generated JobRequest objects.
+            list: A list of generated JobRequest objects.
         """
         jobs = []
         previous_sub_time = 0
@@ -116,7 +116,7 @@ class Experiments:
             seed_num: A seed used to update the job generator.
 
         Returns:
-            A list of generated jobs
+            list: A list of generated jobs
         """
         seed(seed_num + num)
         numpy.random.seed(seed=seed_num + num)

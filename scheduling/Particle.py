@@ -32,7 +32,7 @@ class Particle:
         self.c2 = 2
         """A scaling factor for the relative position of the Particle in respect\
          to the group's best known position."""
-        self.pace = 0.1  #: The updating pace
+        self.update_rate = 0.1  #: The updating rate
 
     def update_position(self, group_best_config: SchedulerConfig):
         """Updates the position of the Particle.
@@ -44,7 +44,7 @@ class Particle:
         best_pos = np.array(self.best_config.to_list())
         group_best_pos = np.array(group_best_config.to_list())
 
-        self.velocity = self.pace * (
+        self.velocity = self.update_rate * (
             self.velocity
             + self.c1 * random() * (best_pos - position)
             + self.c2 * random() * (group_best_pos - position)

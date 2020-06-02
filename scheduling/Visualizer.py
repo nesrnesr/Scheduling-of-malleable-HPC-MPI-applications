@@ -83,9 +83,7 @@ class Visualizer:
             stats: A container object for the epoch's or experiment's statistics.
             filepath: Location for writing the resulting chart.
             show_range: A flag for enabling showing the min-max range as a filled\
-            up area on the graph. Defaults to False, as when running low number of\
-            epochs, the resulting scale of the graph can be too large which lead\
-            to a flattenning of the mean cost.
+            up area on the graph. Defaults to False.
 
         """
         path = Path(filepath)
