@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "scheduling"
+version = "0.1.0"
+description = ""
+authors = ["Nesryne Mejri", "Briag Dupont", "Lucas Romao"]
+license = "MIT"
+
+readme = 'README.md'
+
+repository = "https://github.com/briagd/Scheduling-of-malleable-HPC-MPI-applications"
+
+[tool.poetry.dependencies]
+python = "^3.7"
+numpy = "^1.18.4"
+pandas = "^1.0.4"
+structlog = "^20.1.0"
+scipy = "^1.4.1"
+matplotlib = "^3.2.1"
+colorama = "^0.4.3"
+sphinx = "^3.0.4"
+sphinx_rtd_theme = "^0.4.3"
+pyyaml = "^5.3.1"

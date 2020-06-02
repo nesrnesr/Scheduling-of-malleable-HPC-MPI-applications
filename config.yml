@@ -1,0 +1,17 @@
+swarm:
+  EPOCH_COUNT: 30
+  PARTICLE_COUNT: 3 # minimum 2
+  SERVER_COUNT : 5
+  EXPTS_COUNT : 5
+  SEED : 1
+  # Drawing Gantts depends on the number of epochs, particles and experiments,
+  # too many slows the execution
+  draw_particle_gantt : True
+  draw_cost_graph : True
+
+benchmarks:
+  SERVER_COUNT : 5
+  EXPTS_COUNT : 10
+  SEED : 1
+  draw_experiment_gantt : True
+  draw_experiment_cost : True
